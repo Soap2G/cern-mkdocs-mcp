@@ -7,7 +7,7 @@ name = "atlas-software-docs-mcp"
 authors = [
   { name = "Giovanni Guerrieri", email = "giorgio.ravelli66@gmail.com" },
 ]
-description = "MCP Server for the ATLAS offline software documentation"
+description = "MCP Server for searching multiple MkDocs-based CERN documentation sites"
 readme = "README.md"
 license = "MIT"
 license-files = ["LICENSE"]
@@ -36,12 +36,26 @@ dependencies = [
 ]
 
 [project.scripts]
-atlas-software-docs-mcp = "atlas_software_docs_mcp.cli:main"
+docs-mcp = "atlas_software_docs_mcp.cli:main"
 
 [project.urls]
 Homepage = "https://atlas-software.docs.cern.ch"
-"Source (docs)" = "https://gitlab.cern.ch/atlas/software-docs/atlas-software-docs"
 "Bug Tracker" = "https://github.com/atlas-outreach-data-tools/atlas-software-docs-mcp/issues"
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/atlas_software_docs_mcp"]
+
+[tool.hatch.build.targets.wheel.force-include]
+"src/atlas_software_docs_mcp/docs_sources.json" = "atlas_software_docs_mcp/docs_sources.json"
+
+[tool.hatch.build.targets.sdist]
+include = [
+  "src",
+  "tests",
+  "README.md",
+  "LICENSE",
+  "pyproject.toml",
+]
 
 [tool.hatch]
 version.path = "src/atlas_software_docs_mcp/__init__.py"

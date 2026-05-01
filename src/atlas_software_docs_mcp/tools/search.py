@@ -1,10 +1,9 @@
-"""``search_atlas_software_docs`` - keyword search over the docs index.
+"""``search_docs`` - keyword search across multiple documentation sources.
 
 Wraps :class:`atlas_software_docs_mcp.tools._index.DocsIndex` (BM25 over
-the published MkDocs search payload). Returns a token-efficient summary
+published MkDocs search payloads). Returns token-efficient summaries
 (arcade.dev Response Shaper / Token-Efficient Response): titles, URLs,
-snippets only - no body. The agent retrieves bodies via
-``fetch_atlas_software_doc``.
+snippets only - no body. The agent retrieves bodies via ``fetch_doc``.
 """
 
 from __future__ import annotations
@@ -14,90 +13,95 @@ from typing import Any
 
 from mcp.server.fastmcp import Context, FastMCP  # noqa: TC002
 
+from atlas_software_docs_mcp.config import format_sources_guide, validate_source_id
 from atlas_software_docs_mcp.tools._helpers import format_error
 
 _MAX_LIMIT = 25
-_KNOWN_SECTIONS = (
-    "athena",
-    "developers",
-    "trigger",
-    "analysis",
-    "shifts-and-infrastructure",
-)
 
 
 def register(mcp: FastMCP) -> None:
     """Register the search tool."""
 
     @mcp.tool()
-    async def search_atlas_software_docs(
+    async def search_docs(
         query: str,
-        section: str | None = None,
+        source: str = "atlas-sft",
         limit: int = 10,
         *,
         ctx: Context[Any, Any],
     ) -> str:
-        """Keyword search across the ATLAS offline software documentation.
+        """Keyword search across a documentation source.
 
         Returns ``{title, url, path, section, score, snippet}`` per hit.
-        NOT for ATLAS Open Data - use the ``cernopendata`` or
-        ``atlasopenmagic`` MCPs for that.
+        Supports multiple CERN documentation sites (ATLAS software, batch,
+        cloud, ML, SWAN, etc.).
 
-        After a hit, call ``fetch_atlas_software_doc(url)`` to retrieve
+        After a hit, call ``fetch_doc(url_or_path, source)`` to retrieve
         the Markdown body (full, outline, or one named section).
 
         Args:
             query: Free-text query. Word-token matched (case-insensitive)
                 and ranked by BM25. Multi-token queries are AND-biased
                 via BM25 scoring, not strict AND.
-            section: Restrict to one top-level section. One of:
-                ``athena``, ``developers``, ``trigger``, ``analysis``,
-                ``shifts-and-infrastructure``. Omit to search the whole
-                site.
+            source: Documentation source ID. One of:
+                ``atlas-sft``, ``atlas-computing``, ``atlas-databases``,
+                ``batch``, ``cloud``, ``ml``, ``swan``.
+                Default: ``atlas-sft`` (ATLAS Software).
             limit: Max hits returned (1-25, default 10). Smaller is more
                 token-efficient.
         """
         limit = max(1, min(int(limit), _MAX_LIMIT))
-        section_norm = section.strip().lower() if section else None
-        if section_norm and section_norm not in _KNOWN_SECTIONS:
-            return format_error(
-                ValueError(f"Unknown section: {section_norm!r}"),
-                recovery=[
-                    f"Pass one of: {', '.join(_KNOWN_SECTIONS)}.",
-                    "Or omit `section` to search the whole site.",
-                ],
-            )
+        source_norm = source.strip().lower() if source else "atlas-sft"
 
         ctxd = ctx.request_context.lifespan_context
         http = ctxd["http"]
-        index = ctxd["index"]
+        indices = ctxd["indices"]
+        sources_registry = ctxd["sources"]
+
+        # Validate source ID
+        try:
+            validate_source_id(source_norm, sources_registry)
+        except ValueError as e:
+            return format_error(e, recovery=[
+                format_sources_guide(sources_registry),
+            ])
+
+        # Get the index for this source
+        index = indices.get(source_norm)
+        if not index:
+            return format_error(
+                ValueError(f"Index not found for source: {source_norm!r}"),
+                recovery=[
+                    "This is an internal error. Please report it.",
+                ],
+            )
+
         try:
             await index.ensure_fresh(http)
         except Exception as exc:  # noqa: BLE001
+            source_obj = sources_registry[source_norm]
             return format_error(exc, recovery=[
-                "The MkDocs search index could not be loaded. Try again "
-                "shortly.",
-                "Verify the docs site is up: "
-                "https://atlas-software.docs.cern.ch/",
+                f"The MkDocs search index for '{source_norm}' could not be loaded. "
+                "Try again shortly.",
+                f"Verify the docs site is up: {source_obj.docs_site_url}",
             ])
 
-        results = index.search(query, limit=limit, section=section_norm)
+        results = index.search(query, limit=limit, section=None)
         return json.dumps(
             {
                 "query": query,
-                "section": section_norm,
+                "source": source_norm,
                 "limit": limit,
                 "returned": len(results),
                 "results": results,
                 "hint": (
-                    "No matches - try broader / fewer terms, or drop the "
-                    "`section` filter."
+                    "No matches - try broader / fewer terms, or try a different source."
                     if not results
                     else None
                 ),
                 "next_action": (
-                    "Call fetch_atlas_software_doc(url_or_path) on a "
-                    "result to retrieve the Markdown body."
+                    "Call fetch_doc(url_or_path, source) on a result to retrieve "
+                    "the Markdown body."
                     if results
                     else None
                 ),

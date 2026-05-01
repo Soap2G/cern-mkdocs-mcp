@@ -96,9 +96,32 @@ def _make_snippet(text: str, query_tokens: list[str]) -> str:
 class DocsIndex:
     """Lazy-loaded BM25 index over the MkDocs ``search_index.json`` payload."""
 
-    def __init__(self, docs_base: str) -> None:
-        self.docs_base = docs_base.rstrip("/")
-        self.search_index_url = f"{self.docs_base}/search/search_index.json"
+    def __init__(
+        self,
+        docs_base: str | None = None,
+        search_index_url: str | None = None,
+    ) -> None:
+        """Initialize the index.
+
+        Args:
+            docs_base: Base URL of the docs site (e.g.,
+                'https://atlas-software.docs.cern.ch'). If provided,
+                search_index_url is computed from it. Kept for backward
+                compatibility.
+            search_index_url: Full URL to search_index.json. Takes
+                precedence over docs_base.
+        """
+        if search_index_url:
+            self.search_index_url = search_index_url
+            # Extract docs_base from search_index_url for _absolute_url calls
+            self.docs_base = search_index_url.rsplit("/search/", 1)[0]
+        elif docs_base:
+            self.docs_base = docs_base.rstrip("/")
+            self.search_index_url = f"{self.docs_base}/search/search_index.json"
+        else:
+            raise ValueError(
+                "Either docs_base or search_index_url must be provided"
+            )
         self.docs: list[dict[str, Any]] = []
         self.bm25: BM25Okapi | None = None
         self.fetched_at: float = 0.0

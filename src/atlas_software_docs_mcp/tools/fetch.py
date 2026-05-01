@@ -1,8 +1,7 @@
-"""``fetch_atlas_software_doc`` - retrieve one page as Markdown.
+"""``fetch_doc`` - retrieve one page as Markdown from a documentation source.
 
-Hits the GitLab Files Raw API for the docs source repo
-(``atlas/software-docs/atlas-software-docs``). The repo is public, so no
-token is needed.
+Hits the GitLab Files Raw API for the docs source repo. Repos are public;
+no token needed.
 
 Implements the arcade.dev Progressive Detail pattern via ``mode``:
 
@@ -24,6 +23,7 @@ from urllib.parse import quote, urlparse
 
 from mcp.server.fastmcp import Context, FastMCP  # noqa: TC002
 
+from atlas_software_docs_mcp.config import format_sources_guide, validate_source_id
 from atlas_software_docs_mcp.tools._helpers import format_error
 
 _HEADING_RE = re.compile(r"^(#{1,6})\s+(.+?)\s*$", re.MULTILINE)
@@ -34,7 +34,7 @@ def _candidate_source_paths(url_or_path: str) -> list[str]:
     """Map a docs URL or relative path to candidate ``docs/...`` paths.
 
     Handles three input shapes:
-    - Rendered URL: ``https://atlas-software.docs.cern.ch/analysis/grid/``
+    - Rendered URL: ``https://example.docs.cern.ch/analysis/grid/``
     - Relative path: ``analysis/grid/`` or ``/analysis/grid/``
     - Direct .md path: ``analysis/grid.md`` (with or without ``docs/`` prefix)
 
@@ -123,15 +123,16 @@ def register(mcp: FastMCP) -> None:
     """Register the fetch tool."""
 
     @mcp.tool()
-    async def fetch_atlas_software_doc(
+    async def fetch_doc(
         url_or_path: str,
+        source: str = "atlas-sft",
         mode: str = "markdown",
         *,
         ctx: Context[Any, Any],
     ) -> str:
-        """Fetch one ATLAS software docs page as Markdown from upstream GitLab.
+        """Fetch one documentation page as Markdown from upstream VCS.
 
-        The repo is public; no auth required. Tries both
+        The repos are public; no auth required. Tries both
         ``docs/<path>/index.md`` and ``docs/<path>.md`` for directory-style
         inputs (MkDocs admits both). Falls through 404s.
 
@@ -141,6 +142,10 @@ def register(mcp: FastMCP) -> None:
                   ``https://atlas-software.docs.cern.ch/analysis/grid/``
                 - A relative path, e.g. ``analysis/grid/``
                 - A direct ``.md`` source path, e.g. ``analysis/grid.md``
+            source: Documentation source ID. One of:
+                ``atlas-sft``, ``atlas-computing``, ``atlas-databases``,
+                ``batch``, ``cloud``, ``ml``, ``swan``.
+                Default: ``atlas-sft`` (ATLAS Software).
             mode: Output projection.
                 - ``"markdown"`` (default): full body.
                 - ``"outline"``: list of H1-H3 headings only - cheap way
@@ -149,29 +154,37 @@ def register(mcp: FastMCP) -> None:
                   from a matching heading (case-insensitive). E.g.
                   ``"sections:Build"``.
         """
+        source_norm = source.strip().lower() if source else "atlas-sft"
         candidates = _candidate_source_paths(url_or_path)
         if not candidates:
             return format_error(
                 ValueError(f"Could not derive a source path from {url_or_path!r}"),
                 recovery=[
-                    "Pass a URL like "
-                    "https://atlas-software.docs.cern.ch/<path>/",
+                    "Pass a URL like https://example.docs.cern.ch/<path>/",
                     "or a relative path like 'athena/configuration/'.",
-                    "Use search_atlas_software_docs(query=...) to find a "
-                    "valid URL first.",
+                    "Use search_docs(query=..., source=...) to find a valid URL first.",
                 ],
             )
 
         ctxd = ctx.request_context.lifespan_context
         http = ctxd["http"]
         gitlab_api: str = ctxd["gitlab_api"]
-        project_id: str = ctxd["project_id"]
-        docs_base: str = ctxd["docs_base"]
+        sources_registry = ctxd["sources"]
+
+        # Validate source ID
+        try:
+            validate_source_id(source_norm, sources_registry)
+        except ValueError as e:
+            return format_error(e, recovery=[
+                format_sources_guide(sources_registry),
+            ])
+
+        source_obj = sources_registry[source_norm]
 
         last_error: Exception | None = None
         for path in candidates:
             api_url = (
-                f"{gitlab_api.rstrip('/')}/projects/{project_id}/"
+                f"{gitlab_api.rstrip('/')}/projects/{quote(source_obj.project_id, safe='')}/"
                 f"repository/files/{quote(path, safe='')}/raw"
             )
             try:
@@ -191,8 +204,9 @@ def register(mcp: FastMCP) -> None:
             projection = _project(markdown, mode)
             return json.dumps(
                 {
+                    "source": source_norm,
                     "source_path": path,
-                    "url": _rendered_url(docs_base, path),
+                    "url": _rendered_url(source_obj.docs_site_url, path),
                     **projection,
                 },
                 default=str,
@@ -201,9 +215,8 @@ def register(mcp: FastMCP) -> None:
         return format_error(
             last_error or FileNotFoundError("No matching source file"),
             recovery=[
-                f"Tried {len(candidates)} candidate path(s) under "
-                "docs/ - none resolved.",
-                "Use search_atlas_software_docs(query=...) to find the "
-                "correct URL first, then re-call fetch with that URL.",
+                f"Tried {len(candidates)} candidate path(s) under docs/ - none resolved.",
+                "Use search_docs(query=..., source=...) to find the correct URL first, "
+                "then re-call fetch with that URL.",
             ],
         )

@@ -6,6 +6,7 @@ from unittest.mock import AsyncMock, MagicMock
 import httpx
 import pytest
 
+from atlas_software_docs_mcp.config import DocSource
 from atlas_software_docs_mcp.tools._index import DocsIndex
 
 
@@ -50,19 +51,66 @@ def make_response() -> Any:
 
 @pytest.fixture
 def empty_index() -> DocsIndex:
+    """A DocsIndex bound to atlas-sft, with no docs loaded yet."""
     return DocsIndex(docs_base="https://atlas-software.docs.cern.ch")
 
 
 @pytest.fixture
-def mock_ctx(mock_http: MagicMock, empty_index: DocsIndex) -> MagicMock:
-    """Mock FastMCP Context with the lifespan dict tools expect."""
+def sample_sources() -> dict[str, DocSource]:
+    """A two-source registry used by the tool tests.
+
+    ``atlas-sft`` mirrors the real default; ``batch`` is a second source
+    so tests can verify per-source routing without depending on the
+    full bundled config.
+    """
+    return {
+        "atlas-sft": DocSource(
+            id="atlas-sft",
+            name="ATLAS Software",
+            search_index_url=(
+                "https://atlas-software.docs.cern.ch/search/search_index.json"
+            ),
+            repo_url=(
+                "https://gitlab.cern.ch/atlas/software-docs/atlas-software-docs"
+            ),
+            project_id="202647",
+            docs_site_url="https://atlas-software.docs.cern.ch",
+        ),
+        "batch": DocSource(
+            id="batch",
+            name="HTCondor Batch",
+            search_index_url=(
+                "https://batchdocs.web.cern.ch/search/search_index.json"
+            ),
+            repo_url="https://gitlab.cern.ch/batch/batchdocs",
+            project_id="batch/batchdocs",
+            docs_site_url="https://batchdocs.web.cern.ch",
+        ),
+    }
+
+
+@pytest.fixture
+def sample_indices(sample_sources: dict[str, DocSource]) -> dict[str, DocsIndex]:
+    """One empty DocsIndex per sample source, keyed by source id."""
+    return {
+        sid: DocsIndex(search_index_url=src.search_index_url)
+        for sid, src in sample_sources.items()
+    }
+
+
+@pytest.fixture
+def mock_ctx(
+    mock_http: MagicMock,
+    sample_sources: dict[str, DocSource],
+    sample_indices: dict[str, DocsIndex],
+) -> MagicMock:
+    """Mock FastMCP Context with the multi-source lifespan dict."""
     ctx: MagicMock = MagicMock()
     ctx.request_context.lifespan_context = {
         "http": mock_http,
-        "index": empty_index,
-        "docs_base": "https://atlas-software.docs.cern.ch",
+        "indices": sample_indices,
+        "sources": sample_sources,
         "gitlab_api": "https://gitlab.cern.ch/api/v4",
-        "project_id": "202647",
     }
     return ctx
 

@@ -1,36 +1,42 @@
-# atlas-software-docs-mcp
+# docs-mcp
 
-MCP Server for the [ATLAS offline software documentation](https://atlas-software.docs.cern.ch).
+MCP Server for searching multiple MkDocs-based documentation sites via a unified interface.
 
 This server exposes two tools an LLM agent can use to discover and read
-the ATLAS software docs (Athena, the developer guide, the trigger
-primer, the analysis tutorial, shifts/infra) without crawling.
+documentation from multiple CERN sites (ATLAS software docs, computing docs,
+batch, cloud, ML, SWAN, and more) without crawling.
 
-> **Read-only by design.** No auth, no write tools — the docs source
-> repo at [`atlas/software-docs/atlas-software-docs`](https://gitlab.cern.ch/atlas/software-docs/atlas-software-docs)
-> is public.
+> **Read-only by design.** No auth, no write tools — all documentation
+> sources are public.
 
 ## Architecture
 
 ```
-LLM <--MCP/stdio|HTTP--> atlas-software-docs-mcp serve
-                              |
-                              +-- /search/search_index.json   (cached, BM25)
-                              |     https://atlas-software.docs.cern.ch
-                              |
-                              +-- GitLab Files Raw API        (live)
-                                    https://gitlab.cern.ch/api/v4/...
+LLM <--MCP/stdio|HTTP--> docs-mcp serve
+                            |
+                            +-- Multiple doc sources:
+                            |   +-- search_index.json (cached, BM25)
+                            |   +-- https://atlas-software.docs.cern.ch
+                            |   +-- https://atlas-computing.docs.cern.ch
+                            |   +-- https://atlas-databases.docs.cern.ch
+                            |   +-- https://batchdocs.web.cern.ch
+                            |   +-- https://clouddocs.web.cern.ch
+                            |   +-- https://ml.docs.cern.ch
+                            |   +-- https://swan.docs.cern.ch
+                            |
+                            +-- GitLab/GitHub Raw API (live)
+                                  https://gitlab.cern.ch/api/v4/...
 ```
 
-The MkDocs site already publishes a full search payload at
-`/search/search_index.json`. The server downloads it once per 24 h, builds
-an in-memory BM25 ranker, and serves search hits from it. Markdown bodies
-are pulled live from GitLab on demand.
+Each MkDocs site publishes a search payload at `/search/search_index.json`.
+The server downloads each index once per 24 h, builds in-memory BM25 rankers,
+and serves search hits from them. Markdown bodies are pulled live from VCS
+on demand.
 
 ## Installation
 
 ```bash
-pip install atlas-software-docs-mcp
+pip install docs-mcp
 ```
 
 Or with pixi:
@@ -44,25 +50,30 @@ pixi install
 ### As an MCP server (stdio)
 
 ```bash
-atlas-software-docs-mcp serve
+docs-mcp serve
+```
+
+Or with a custom config file:
+
+```bash
+docs-mcp serve --config /path/to/docs-sources.json
 ```
 
 ### As a remote MCP (Streamable HTTP)
 
 ```bash
-atlas-software-docs-mcp serve --transport streamable-http --port 8000
+docs-mcp serve --transport streamable-http --port 8000
 ```
 
-This is the deployment shape used by the sibling MCPs at
-`*.app.cern.ch/mcp`.
+This is the deployment shape used by MCP servers at `*.app.cern.ch/mcp`.
 
 ### Claude Desktop / opencode (stdio)
 
 ```json
 {
   "mcpServers": {
-    "atlas-software-docs": {
-      "command": "atlas-software-docs-mcp",
+    "docs": {
+      "command": "docs-mcp",
       "args": ["serve"]
     }
   }
@@ -75,9 +86,9 @@ In `opencode.json`:
 
 ```json
 "mcp": {
-  "atlas-software-docs": {
+  "docs": {
     "type": "remote",
-    "url": "https://atlas-software-docs-mcp.app.cern.ch/mcp",
+    "url": "https://docs-mcp.app.cern.ch/mcp",
     "oauth": false
   }
 }
@@ -87,33 +98,43 @@ In `opencode.json`:
 
 | Tool | Description |
 |------|-------------|
-| `search_atlas_software_docs` | BM25 search over the docs (title + URL + snippet only) |
-| `fetch_atlas_software_doc` | Fetch one page's Markdown source from GitLab; supports `mode="markdown" \| "outline" \| "sections:<heading>"` |
+| `search_docs` | BM25 search across a chosen documentation source (title + URL + snippet only); `source` param chooses which docs site to search |
+| `fetch_doc` | Fetch one page's Markdown/outline from the source repository; supports `mode="markdown" \| "outline" \| "sections:<heading>"` |
+
+### Supported doc sources
+
+| Source ID | Documentation |
+|-----------|---------------|
+| `atlas-sft` | [ATLAS software/Athena](https://atlas-software.docs.cern.ch) |
+| `atlas-computing` | [ATLAS computing guide](https://atlas-computing.docs.cern.ch) |
+| `atlas-databases` | [ATLAS databases](https://atlas-databases.docs.cern.ch) |
+| `batch` | [HTCondor Batch](https://batchdocs.web.cern.ch) |
+| `cloud` | [CERN Cloud](https://clouddocs.web.cern.ch) |
+| `ml` | [ML@CERN](https://ml.docs.cern.ch) |
+| `swan` | [SWAN (Jupyter)](https://swan.docs.cern.ch) |
 
 ## Available resources
 
 | URI | Description |
 |-----|-------------|
-| `atlas-software-docs://guide` | Quick reference: scope, tools, sections, freshness, NOT-in-scope topics |
+| `docs://sources` | Lists all registered documentation sources and metadata (URLs, VCS paths, freshness) |
 
 ## Design principles ([arcade.dev](https://www.arcade.dev/patterns) patterns)
 
-The two tools are deliberately small and aligned with arcade.dev
-patterns:
+The two tools are deliberately small and aligned with arcade.dev patterns:
 
 - **Query Tool** — both tools are read-only.
 - **Tool Description** — descriptions are written for LLM comprehension
-  and explicitly disclaim ATLAS Open Data (Context Boundary), so the
-  router does not collide with the sibling `cernopendata` /
-  `atlasopenmagic` MCPs.
-- **Smart Defaults** — `limit=10`, `mode="markdown"`. Most calls pass
-  zero optional args.
-- **Constrained Input** — `section` is validated against the closed set
-  of MkDocs top-level sections; unknown values return a Recovery Guide
-  listing the valid ones.
-- **Natural Identifier** — `fetch_atlas_software_doc` accepts a
-  rendered URL, a relative path, or a direct `.md` path, and resolves
-  each shape internally.
+  with explicit scope boundaries to avoid router confusion.
+- **Multi-source Router** — `source` parameter routes requests to the
+  correct documentation index; unknown values return a Recovery Guide
+  listing valid sources.
+- **Smart Defaults** — `limit=10`, `mode="markdown"`, `source="atlas-sft"`.
+  Most calls pass zero optional args.
+- **Constrained Input** — `source` is validated against the closed set
+  of registered documentation sites.
+- **Natural Identifier** — `fetch_doc` accepts a rendered URL, a relative
+  path, or a direct `.md` path, and resolves each shape internally.
 - **Token-Efficient Response** — search returns title / URL / snippet
   only (no body); body fetch is a separate call.
 - **Progressive Detail / Operation Mode** — fetch supports
@@ -123,9 +144,9 @@ patterns:
   so it can be cited / re-fetched without paying the search index cost
   again.
 - **Recovery Guide** — every error returns a structured string listing
-  concrete next-tool calls (e.g. "call `search_atlas_software_docs` to
-  find the correct URL first").
-- **Idempotent / cacheable** — the search index is cached for 24 h with
+  concrete next-tool calls (e.g. "call `search_docs` with `source="batch"`
+  to find the correct URL first").
+- **Idempotent / cacheable** — search indexes are cached for 24 h with
   staleness checks; Markdown fetches piggyback on HTTP caching.
 - **Tool Versioning** — the package version (`__init__.py:__version__`)
   is the durable handle; pin it on the deployment side.
@@ -147,7 +168,7 @@ and the GitLab raw fetcher is mocked. No CERN network access required.
 
 | MCP | Scope |
 |-----|-------|
-| `atlas-software-docs-mcp` (this) | ATLAS *internal/offline* software docs (Athena, dev guide, trigger, analysis tutorial) |
+| `docs-mcp` (this) | Multi-source: ATLAS software/computing/databases, Batch, Cloud, ML@CERN, SWAN |
 | [`cernopendata-mcp`](../cernopendata-mcp) | CERN Open Data portal records, files, glossary |
 | [`atlasopenmagic-mcp`](../atlasopenmagic-mcp) | ATLAS metadata catalogue (AMI), dataset / run-list lookups |
 

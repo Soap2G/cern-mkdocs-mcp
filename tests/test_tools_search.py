@@ -1,4 +1,4 @@
-"""Tests for ``search_atlas_software_docs``."""
+"""Tests for ``search_docs``."""
 
 from __future__ import annotations
 
@@ -47,46 +47,69 @@ class TestSearchTool:
         mock_http.get.return_value = make_response(json_data=SAMPLE_PAYLOAD)
         tools = capture_tools(register)
 
-        result = await tools["search_atlas_software_docs"](
+        result = await tools["search_docs"](
             query="athena configuration", ctx=mock_ctx,
         )
         data = json.loads(result)
         assert data["query"] == "athena configuration"
+        assert data["source"] == "atlas-sft"  # default
         assert data["returned"] >= 1
         top = data["results"][0]
         assert "athena" in top["url"].lower()
         assert top["snippet"]
         assert data["hint"] is None
-        assert data["next_action"] and "fetch_atlas_software_doc" in data["next_action"]
+        assert data["next_action"] and "fetch_doc" in data["next_action"]
 
-    async def test_unknown_section_returns_recovery_listing_valid_sections(
+    async def test_unknown_source_returns_recovery_listing_valid_sources(
         self, mock_ctx: MagicMock,
     ) -> None:
         tools = capture_tools(register)
-        result = await tools["search_atlas_software_docs"](
-            query="anything", section="bogus", ctx=mock_ctx,
+        result = await tools["search_docs"](
+            query="anything", source="bogus-not-registered", ctx=mock_ctx,
         )
         assert "Recovery steps" in result
-        # Mentions the valid section names.
-        assert "athena" in result
-        assert "analysis" in result
+        # Mentions valid sources from the sample registry.
+        assert "atlas-sft" in result
+        assert "batch" in result
 
-    async def test_section_filter_applied(
+    async def test_routes_to_correct_source(
         self,
         mock_ctx: MagicMock,
         mock_http: MagicMock,
         make_response: Any,
     ) -> None:
-        mock_http.get.return_value = make_response(json_data=SAMPLE_PAYLOAD)
+        mock_http.get.return_value = make_response(json_data={
+            "docs": [
+                {
+                    "location": "tutorial/condor_submit/",
+                    "title": "condor_submit tutorial",
+                    "text": "Submit a HTCondor job with condor_submit.",
+                },
+                {
+                    "location": "advanced/scheduling/",
+                    "title": "scheduling",
+                    "text": "Configure scheduling priorities for fair use.",
+                },
+                {
+                    "location": "extras/security/",
+                    "title": "security",
+                    "text": "Tokens secure jobs across pools.",
+                },
+            ],
+        })
         tools = capture_tools(register)
 
-        result = await tools["search_atlas_software_docs"](
-            query="grid", section="analysis", ctx=mock_ctx,
+        result = await tools["search_docs"](
+            query="condor", source="batch", ctx=mock_ctx,
         )
         data = json.loads(result)
-        assert data["section"] == "analysis"
-        assert data["results"]
-        assert all(r["section"] == "analysis" for r in data["results"])
+        assert data["source"] == "batch"
+        # The URL of any hit must come from the batch source's docs_site.
+        for hit in data["results"]:
+            assert hit["url"].startswith("https://batchdocs.web.cern.ch/")
+        # The URL the index downloaded from is the batch source's payload.
+        called_url = mock_http.get.call_args.args[0]
+        assert called_url == "https://batchdocs.web.cern.ch/search/search_index.json"
 
     async def test_empty_results_includes_hint(
         self,
@@ -97,7 +120,7 @@ class TestSearchTool:
         mock_http.get.return_value = make_response(json_data=SAMPLE_PAYLOAD)
         tools = capture_tools(register)
 
-        result = await tools["search_atlas_software_docs"](
+        result = await tools["search_docs"](
             query="zzzzzzz_nomatch", ctx=mock_ctx,
         )
         data = json.loads(result)
@@ -113,11 +136,13 @@ class TestSearchTool:
         mock_http.get.side_effect = RuntimeError("network down")
         tools = capture_tools(register)
 
-        result = await tools["search_atlas_software_docs"](
+        result = await tools["search_docs"](
             query="athena", ctx=mock_ctx,
         )
         assert "network down" in result
         assert "Recovery steps" in result
+        # Recovery message names the affected source's site.
+        assert "atlas-software.docs.cern.ch" in result
 
     async def test_limit_clamped(
         self,
@@ -128,13 +153,13 @@ class TestSearchTool:
         mock_http.get.return_value = make_response(json_data=SAMPLE_PAYLOAD)
         tools = capture_tools(register)
 
-        result = await tools["search_atlas_software_docs"](
+        result = await tools["search_docs"](
             query="athena", limit=500, ctx=mock_ctx,
         )
         data = json.loads(result)
         assert data["limit"] == 25  # _MAX_LIMIT
 
-    async def test_section_normalized(
+    async def test_index_loaded_only_once_across_calls_per_source(
         self,
         mock_ctx: MagicMock,
         mock_http: MagicMock,
@@ -143,23 +168,31 @@ class TestSearchTool:
         mock_http.get.return_value = make_response(json_data=SAMPLE_PAYLOAD)
         tools = capture_tools(register)
 
-        result = await tools["search_atlas_software_docs"](
-            query="grid", section="  ANALYSIS  ", ctx=mock_ctx,
-        )
-        data = json.loads(result)
-        assert data["section"] == "analysis"
-
-    async def test_index_loaded_only_once_across_calls(
-        self,
-        mock_ctx: MagicMock,
-        mock_http: MagicMock,
-        make_response: Any,
-    ) -> None:
-        mock_http.get.return_value = make_response(json_data=SAMPLE_PAYLOAD)
-        tools = capture_tools(register)
-
-        await tools["search_atlas_software_docs"](query="athena", ctx=mock_ctx)
-        await tools["search_atlas_software_docs"](query="grid", ctx=mock_ctx)
-        # The MkDocs payload is downloaded exactly once thanks to the TTL
-        # cache on DocsIndex.
+        await tools["search_docs"](query="athena", ctx=mock_ctx)
+        await tools["search_docs"](query="grid", ctx=mock_ctx)
+        # Same source -> the MkDocs payload is downloaded exactly once
+        # thanks to DocsIndex's TTL cache.
         assert mock_http.get.call_count == 1
+
+    async def test_each_source_loads_its_own_index(
+        self,
+        mock_ctx: MagicMock,
+        mock_http: MagicMock,
+        make_response: Any,
+    ) -> None:
+        mock_http.get.return_value = make_response(json_data=SAMPLE_PAYLOAD)
+        tools = capture_tools(register)
+
+        await tools["search_docs"](
+            query="athena", source="atlas-sft", ctx=mock_ctx,
+        )
+        await tools["search_docs"](
+            query="condor", source="batch", ctx=mock_ctx,
+        )
+        # One fetch per source.
+        assert mock_http.get.call_count == 2
+        called_urls = {c.args[0] for c in mock_http.get.call_args_list}
+        assert called_urls == {
+            "https://atlas-software.docs.cern.ch/search/search_index.json",
+            "https://batchdocs.web.cern.ch/search/search_index.json",
+        }

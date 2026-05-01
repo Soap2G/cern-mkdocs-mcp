@@ -1,4 +1,4 @@
-"""Tests for ``fetch_atlas_software_doc``."""
+"""Tests for ``fetch_doc``."""
 
 from __future__ import annotations
 
@@ -144,14 +144,27 @@ class TestFetchTool:
         mock_http.get.return_value = make_response(text=SAMPLE_MD)
         tools = capture_tools(register)
 
-        result = await tools["fetch_atlas_software_doc"](
+        result = await tools["fetch_doc"](
             "analysis/grid/", ctx=mock_ctx,
         )
         data = json.loads(result)
         assert data["mode"] == "markdown"
+        assert data["source"] == "atlas-sft"
         assert "Submit jobs with prun" in data["content"]
         assert data["url"].endswith("/analysis/grid/")
         assert data["source_path"] == "docs/analysis/grid/index.md"
+
+    async def test_unknown_source_returns_recovery(
+        self,
+        mock_ctx: MagicMock,
+    ) -> None:
+        tools = capture_tools(register)
+        result = await tools["fetch_doc"](
+            "analysis/grid/", source="bogus", ctx=mock_ctx,
+        )
+        assert "Recovery steps" in result
+        assert "atlas-sft" in result
+        assert "batch" in result
 
     async def test_falls_through_404_to_alternate_candidate(
         self,
@@ -165,7 +178,7 @@ class TestFetchTool:
         ]
         tools = capture_tools(register)
 
-        result = await tools["fetch_atlas_software_doc"](
+        result = await tools["fetch_doc"](
             "analysis/grid/", ctx=mock_ctx,
         )
         data = json.loads(result)
@@ -181,7 +194,7 @@ class TestFetchTool:
         mock_http.get.return_value = make_response(text=SAMPLE_MD)
         tools = capture_tools(register)
 
-        result = await tools["fetch_atlas_software_doc"](
+        result = await tools["fetch_doc"](
             "analysis/grid/", mode="outline", ctx=mock_ctx,
         )
         data = json.loads(result)
@@ -201,7 +214,7 @@ class TestFetchTool:
         mock_http.get.return_value = make_response(text=SAMPLE_MD)
         tools = capture_tools(register)
 
-        result = await tools["fetch_atlas_software_doc"](
+        result = await tools["fetch_doc"](
             "analysis/grid/", mode="sections:Build", ctx=mock_ctx,
         )
         data = json.loads(result)
@@ -218,7 +231,7 @@ class TestFetchTool:
         mock_http.get.return_value = make_response(text=SAMPLE_MD)
         tools = capture_tools(register)
 
-        result = await tools["fetch_atlas_software_doc"](
+        result = await tools["fetch_doc"](
             "analysis/grid/", mode="sections:Nonexistent", ctx=mock_ctx,
         )
         data = json.loads(result)
@@ -234,22 +247,22 @@ class TestFetchTool:
         mock_http.get.return_value = make_response(status=404)
         tools = capture_tools(register)
 
-        result = await tools["fetch_atlas_software_doc"](
+        result = await tools["fetch_doc"](
             "nope/nada/", ctx=mock_ctx,
         )
         assert "Recovery steps" in result
-        assert "search_atlas_software_docs" in result
+        assert "search_docs" in result
 
     async def test_empty_input_returns_recovery(
         self,
         mock_ctx: MagicMock,
     ) -> None:
         tools = capture_tools(register)
-        result = await tools["fetch_atlas_software_doc"]("", ctx=mock_ctx)
+        result = await tools["fetch_doc"]("", ctx=mock_ctx)
         assert "Could not derive" in result
         assert "Recovery steps" in result
 
-    async def test_constructs_correct_gitlab_api_url(
+    async def test_constructs_correct_gitlab_api_url_for_default_source(
         self,
         mock_ctx: MagicMock,
         mock_http: MagicMock,
@@ -258,13 +271,46 @@ class TestFetchTool:
         mock_http.get.return_value = make_response(text=SAMPLE_MD)
         tools = capture_tools(register)
 
-        await tools["fetch_atlas_software_doc"](
+        await tools["fetch_doc"](
             "analysis/grid.md", ctx=mock_ctx,
         )
         called_url = mock_http.get.call_args.args[0]
-        # URL is .../projects/<id>/repository/files/<url-encoded path>/raw
+        # Numeric project_id 202647 is quoted (no-op for digits).
         assert "/projects/202647/repository/files/" in called_url
         assert "docs%2Fanalysis%2Fgrid.md" in called_url
         assert called_url.endswith("/raw")
-        # ref=main is in params, not the URL.
         assert mock_http.get.call_args.kwargs["params"] == {"ref": "main"}
+
+    async def test_constructs_correct_gitlab_api_url_for_path_project_id(
+        self,
+        mock_ctx: MagicMock,
+        mock_http: MagicMock,
+        make_response: Any,
+    ) -> None:
+        mock_http.get.return_value = make_response(text=SAMPLE_MD)
+        tools = capture_tools(register)
+
+        await tools["fetch_doc"](
+            "tutorial/intro.md", source="batch", ctx=mock_ctx,
+        )
+        called_url = mock_http.get.call_args.args[0]
+        # The batch source has project_id "batch/batchdocs" (raw path);
+        # quote() URL-encodes the slash exactly once.
+        assert "/projects/batch%2Fbatchdocs/repository/files/" in called_url
+        assert "docs%2Ftutorial%2Fintro.md" in called_url
+
+    async def test_rendered_url_uses_source_specific_docs_site(
+        self,
+        mock_ctx: MagicMock,
+        mock_http: MagicMock,
+        make_response: Any,
+    ) -> None:
+        mock_http.get.return_value = make_response(text=SAMPLE_MD)
+        tools = capture_tools(register)
+
+        result = await tools["fetch_doc"](
+            "tutorial/intro/", source="batch", ctx=mock_ctx,
+        )
+        data = json.loads(result)
+        assert data["source"] == "batch"
+        assert data["url"] == "https://batchdocs.web.cern.ch/tutorial/intro/"

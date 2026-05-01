@@ -1,0 +1,60 @@
+{
+  "sources": [
+    {
+      "id": "atlas-sft",
+      "name": "ATLAS Software",
+      "search_index_url": "https://atlas-software.docs.cern.ch/search/search_index.json",
+      "repo_url": "https://gitlab.cern.ch/atlas/software-docs/atlas-software-docs",
+      "project_id": "202647",
+      "docs_site_url": "https://atlas-software.docs.cern.ch"
+    },
+    {
+      "id": "atlas-computing",
+      "name": "ATLAS Computing",
+      "search_index_url": "https://atlas-computing.docs.cern.ch/search/search_index.json",
+      "repo_url": "https://gitlab.cern.ch/atlas/computing-docs/atlas-computing-docs",
+      "project_id": "202648",
+      "docs_site_url": "https://atlas-computing.docs.cern.ch"
+    },
+    {
+      "id": "atlas-databases",
+      "name": "ATLAS Databases",
+      "search_index_url": "https://atlas-databases.docs.cern.ch/search/search_index.json",
+      "repo_url": "https://gitlab.cern.ch/atlas/databases-docs/atlas-databases-docs",
+      "project_id": "202649",
+      "docs_site_url": "https://atlas-databases.docs.cern.ch"
+    },
+    {
+      "id": "batch",
+      "name": "HTCondor Batch",
+      "search_index_url": "https://batchdocs.web.cern.ch/search/search_index.json",
+      "repo_url": "https://gitlab.cern.ch/batch/batchdocs",
+      "project_id": "203000",
+      "docs_site_url": "https://batchdocs.web.cern.ch"
+    },
+    {
+      "id": "cloud",
+      "name": "CERN Cloud",
+      "search_index_url": "https://clouddocs.web.cern.ch/search/search_index.json",
+      "repo_url": "https://gitlab.cern.ch/cloud/clouddocs",
+      "project_id": "203001",
+      "docs_site_url": "https://clouddocs.web.cern.ch"
+    },
+    {
+      "id": "ml",
+      "name": "ML@CERN",
+      "search_index_url": "https://ml.docs.cern.ch/search/search_index.json",
+      "repo_url": "https://gitlab.cern.ch/cern-it/ml-team/ml-docs",
+      "project_id": "203002",
+      "docs_site_url": "https://ml.docs.cern.ch"
+    },
+    {
+      "id": "swan",
+      "name": "SWAN (Jupyter)",
+      "search_index_url": "https://swan.docs.cern.ch/search/search_index.json",
+      "repo_url": "https://gitlab.cern.ch/swan/swan-docs",
+      "project_id": "203003",
+      "docs_site_url": "https://swan.docs.cern.ch"
+    }
+  ]
+}

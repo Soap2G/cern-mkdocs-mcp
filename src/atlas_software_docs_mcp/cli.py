@@ -1,22 +1,21 @@
-"""Command-line interface for atlas-software-docs-mcp."""
+"""Command-line interface for docs-mcp."""
 
 from __future__ import annotations
 
 import argparse
+from pathlib import Path
 
-from atlas_software_docs_mcp.server import (
-    DEFAULT_DOCS_BASE,
-    DEFAULT_GITLAB_API,
-    DEFAULT_GITLAB_PROJECT_ID,
-    serve,
-)
+from atlas_software_docs_mcp.server import serve
 
 
 def main() -> None:
-    """Entry point for the ``atlas-software-docs-mcp`` command."""
+    """Entry point for the ``docs-mcp`` command."""
     parser = argparse.ArgumentParser(
-        prog="atlas-software-docs-mcp",
-        description="MCP Server for the ATLAS offline software documentation",
+        prog="docs-mcp",
+        description=(
+            "MCP Server for searching multiple MkDocs-based documentation "
+            "sites via a unified interface."
+        ),
     )
     subparsers = parser.add_subparsers(dest="command", metavar="COMMAND")
 
@@ -43,25 +42,12 @@ def main() -> None:
         help="Port for HTTP transport (default: 8000)",
     )
     serve_parser.add_argument(
-        "--docs-base",
-        default=DEFAULT_DOCS_BASE,
+        "--config",
+        type=Path,
+        default=None,
         help=(
-            "ATLAS software docs site base URL "
-            f"(default: {DEFAULT_DOCS_BASE}). Override to point at a "
-            "staging build of the MkDocs site."
-        ),
-    )
-    serve_parser.add_argument(
-        "--gitlab-api",
-        default=DEFAULT_GITLAB_API,
-        help=f"GitLab API base URL (default: {DEFAULT_GITLAB_API})",
-    )
-    serve_parser.add_argument(
-        "--project-id",
-        default=DEFAULT_GITLAB_PROJECT_ID,
-        help=(
-            "GitLab project id (or URL-encoded namespace/path) of the "
-            f"docs source repo (default: {DEFAULT_GITLAB_PROJECT_ID})."
+            "Path to a JSON config defining documentation sources. "
+            "When omitted, the package-bundled docs_sources.json is used."
         ),
     )
 
@@ -72,9 +58,7 @@ def main() -> None:
             transport=args.transport,
             host=args.host,
             port=args.port,
-            docs_base=args.docs_base,
-            gitlab_api=args.gitlab_api,
-            project_id=args.project_id,
+            config_path=args.config,
         )
     else:
         parser.print_help()
