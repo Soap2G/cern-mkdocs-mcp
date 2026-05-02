@@ -6,7 +6,7 @@ from unittest.mock import AsyncMock, MagicMock
 import httpx
 import pytest
 
-from atlas_software_docs_mcp.config import DocSource
+from atlas_software_docs_mcp.config import AuthConfig, DocSource
 from atlas_software_docs_mcp.tools._index import DocsIndex
 
 
@@ -73,7 +73,6 @@ def sample_sources() -> dict[str, DocSource]:
             repo_url=(
                 "https://gitlab.cern.ch/atlas/software-docs/atlas-software-docs"
             ),
-            project_id="202647",
             docs_site_url="https://atlas-software.docs.cern.ch",
         ),
         "batch": DocSource(
@@ -83,8 +82,19 @@ def sample_sources() -> dict[str, DocSource]:
                 "https://batchdocs.web.cern.ch/search/search_index.json"
             ),
             repo_url="https://gitlab.cern.ch/batch/batchdocs",
-            project_id="batch/batchdocs",
             docs_site_url="https://batchdocs.web.cern.ch",
+        ),
+        "atlas-computing": DocSource(
+            id="atlas-computing",
+            name="ATLAS Computing",
+            search_index_url=(
+                "https://atlas-computing.docs.cern.ch/search/search_index.json"
+            ),
+            repo_url=(
+                "https://gitlab.cern.ch/atlas/computing-docs/atlas-computing-docs"
+            ),
+            docs_site_url="https://atlas-computing.docs.cern.ch",
+            auth=AuthConfig(env_var="DOCS_MCP_CERN_SSO_TOKEN"),
         ),
     }
 

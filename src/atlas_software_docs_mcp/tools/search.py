@@ -13,7 +13,12 @@ from typing import Any
 
 from mcp.server.fastmcp import Context, FastMCP  # noqa: TC002
 
-from atlas_software_docs_mcp.config import format_sources_guide, validate_source_id
+from atlas_software_docs_mcp.config import (
+    MissingAuthError,
+    format_sources_guide,
+    resolve_auth_headers,
+    validate_source_id,
+)
 from atlas_software_docs_mcp.tools._helpers import format_error
 
 _MAX_LIMIT = 25
@@ -76,10 +81,22 @@ def register(mcp: FastMCP) -> None:
                 ],
             )
 
+        source_obj = sources_registry[source_norm]
         try:
-            await index.ensure_fresh(http)
+            auth_headers = resolve_auth_headers(source_obj)
+        except MissingAuthError as exc:
+            return format_error(exc, recovery=[
+                f"Set the environment variable ${exc.env_var} to a valid "
+                "CERN SSO token before querying this source.",
+                "Public sources (no auth required): "
+                + ", ".join(
+                    s.id for s in sources_registry.values() if s.auth is None
+                ),
+            ])
+
+        try:
+            await index.ensure_fresh(http, headers=auth_headers or None)
         except Exception as exc:  # noqa: BLE001
-            source_obj = sources_registry[source_norm]
             return format_error(exc, recovery=[
                 f"The MkDocs search index for '{source_norm}' could not be loaded. "
                 "Try again shortly.",

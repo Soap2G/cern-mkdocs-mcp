@@ -134,9 +134,23 @@ class DocsIndex:
     def is_loaded(self) -> bool:
         return self.bm25 is not None
 
-    async def refresh(self, http: httpx.AsyncClient) -> None:
-        """Download the search payload and rebuild the BM25 ranker."""
-        response = await http.get(self.search_index_url)
+    async def refresh(
+        self,
+        http: httpx.AsyncClient,
+        *,
+        headers: dict[str, str] | None = None,
+    ) -> None:
+        """Download the search payload and rebuild the BM25 ranker.
+
+        Args:
+            http: Shared async HTTP client.
+            headers: Extra HTTP headers (used for auth-gated sources).
+                Pass ``None`` for public sources.
+        """
+        response = await http.get(
+            self.search_index_url,
+            headers=headers or None,
+        )
         response.raise_for_status()
         payload = response.json()
         raw_docs = payload.get("docs", []) if isinstance(payload, dict) else []
@@ -160,10 +174,15 @@ class DocsIndex:
         self.bm25 = BM25Okapi(corpora) if corpora else None
         self.fetched_at = time.time()
 
-    async def ensure_fresh(self, http: httpx.AsyncClient) -> None:
+    async def ensure_fresh(
+        self,
+        http: httpx.AsyncClient,
+        *,
+        headers: dict[str, str] | None = None,
+    ) -> None:
         """Refresh the index if missing or stale (older than 24 h)."""
         if not self.is_loaded or self.is_stale:
-            await self.refresh(http)
+            await self.refresh(http, headers=headers)
 
     def search(
         self,

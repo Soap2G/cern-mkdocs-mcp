@@ -196,3 +196,34 @@ class TestSearchTool:
             "https://atlas-software.docs.cern.ch/search/search_index.json",
             "https://batchdocs.web.cern.ch/search/search_index.json",
         }
+
+    async def test_missing_auth_returns_recovery(
+        self,
+        mock_ctx: MagicMock,
+    ) -> None:
+        """Auth-gated source without env var set returns a Recovery Guide."""
+        tools = capture_tools(register)
+
+        result = await tools["search_docs"](
+            query="athena", source="atlas-computing", ctx=mock_ctx,
+        )
+        assert "Recovery steps" in result
+        assert "DOCS_MCP_CERN_SSO_TOKEN" in result
+
+    async def test_present_auth_passes_bearer_header(
+        self,
+        mock_ctx: MagicMock,
+        mock_http: MagicMock,
+        make_response: Any,
+        monkeypatch: Any,
+    ) -> None:
+        """When the env var is set the Bearer token reaches the HTTP call."""
+        monkeypatch.setenv("DOCS_MCP_CERN_SSO_TOKEN", "test-sso-token")
+        mock_http.get.return_value = make_response(json_data=SAMPLE_PAYLOAD)
+        tools = capture_tools(register)
+
+        await tools["search_docs"](
+            query="athena", source="atlas-computing", ctx=mock_ctx,
+        )
+        called_headers = mock_http.get.call_args.kwargs.get("headers") or {}
+        assert called_headers.get("Authorization") == "Bearer test-sso-token"

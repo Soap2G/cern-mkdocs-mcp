@@ -45,7 +45,6 @@ SAMPLE_SOURCES: dict[str, DocSource] = {
         repo_url=(
             "https://gitlab.cern.ch/atlas/software-docs/atlas-software-docs"
         ),
-        project_id="202647",
         docs_site_url="https://atlas-software.docs.cern.ch",
     ),
     "batch": DocSource(
@@ -55,7 +54,6 @@ SAMPLE_SOURCES: dict[str, DocSource] = {
             "https://batchdocs.web.cern.ch/search/search_index.json"
         ),
         repo_url="https://gitlab.cern.ch/batch/batchdocs",
-        project_id="batch/batchdocs",
         docs_site_url="https://batchdocs.web.cern.ch",
     ),
 }

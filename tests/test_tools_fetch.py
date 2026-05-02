@@ -275,13 +275,16 @@ class TestFetchTool:
             "analysis/grid.md", ctx=mock_ctx,
         )
         called_url = mock_http.get.call_args.args[0]
-        # Numeric project_id 202647 is quoted (no-op for digits).
-        assert "/projects/202647/repository/files/" in called_url
+        # gitlab_project_path derived from repo_url (path-encoded, slashes → %2F)
+        assert (
+            "/projects/atlas%2Fsoftware-docs%2Fatlas-software-docs"
+            "/repository/files/" in called_url
+        )
         assert "docs%2Fanalysis%2Fgrid.md" in called_url
         assert called_url.endswith("/raw")
         assert mock_http.get.call_args.kwargs["params"] == {"ref": "main"}
 
-    async def test_constructs_correct_gitlab_api_url_for_path_project_id(
+    async def test_constructs_correct_gitlab_api_url_for_batch_source(
         self,
         mock_ctx: MagicMock,
         mock_http: MagicMock,
@@ -294,8 +297,7 @@ class TestFetchTool:
             "tutorial/intro.md", source="batch", ctx=mock_ctx,
         )
         called_url = mock_http.get.call_args.args[0]
-        # The batch source has project_id "batch/batchdocs" (raw path);
-        # quote() URL-encodes the slash exactly once.
+        # gitlab_project_path for batch/batchdocs → batch%2Fbatchdocs
         assert "/projects/batch%2Fbatchdocs/repository/files/" in called_url
         assert "docs%2Ftutorial%2Fintro.md" in called_url
 
@@ -314,3 +316,51 @@ class TestFetchTool:
         data = json.loads(result)
         assert data["source"] == "batch"
         assert data["url"] == "https://batchdocs.web.cern.ch/tutorial/intro/"
+
+    async def test_missing_auth_returns_recovery(
+        self,
+        mock_ctx: MagicMock,
+    ) -> None:
+        """Auth-gated source without env var set returns a Recovery Guide."""
+        tools = capture_tools(register)
+
+        result = await tools["fetch_doc"](
+            "analysis/grid/", source="atlas-computing", ctx=mock_ctx,
+        )
+        assert "Recovery steps" in result
+        assert "DOCS_MCP_CERN_SSO_TOKEN" in result
+
+    async def test_present_auth_passes_bearer_header(
+        self,
+        mock_ctx: MagicMock,
+        mock_http: MagicMock,
+        make_response: Any,
+        monkeypatch: Any,
+    ) -> None:
+        """When the env var is set the Bearer token is forwarded to GitLab."""
+        monkeypatch.setenv("DOCS_MCP_CERN_SSO_TOKEN", "test-sso-token")
+        mock_http.get.return_value = make_response(text=SAMPLE_MD)
+        tools = capture_tools(register)
+
+        await tools["fetch_doc"](
+            "analysis/grid/", source="atlas-computing", ctx=mock_ctx,
+        )
+        called_headers = mock_http.get.call_args.kwargs.get("headers") or {}
+        assert called_headers.get("Authorization") == "Bearer test-sso-token"
+
+    async def test_public_source_sends_no_auth_header(
+        self,
+        mock_ctx: MagicMock,
+        mock_http: MagicMock,
+        make_response: Any,
+    ) -> None:
+        """Public sources must not send an Authorization header."""
+        mock_http.get.return_value = make_response(text=SAMPLE_MD)
+        tools = capture_tools(register)
+
+        await tools["fetch_doc"](
+            "analysis/grid/", source="atlas-sft", ctx=mock_ctx,
+        )
+        # headers kwarg is either absent, None, or an empty dict
+        called_headers = mock_http.get.call_args.kwargs.get("headers")
+        assert not called_headers  # None or {}

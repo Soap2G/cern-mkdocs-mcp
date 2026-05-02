@@ -23,7 +23,12 @@ from urllib.parse import quote, urlparse
 
 from mcp.server.fastmcp import Context, FastMCP  # noqa: TC002
 
-from atlas_software_docs_mcp.config import format_sources_guide, validate_source_id
+from atlas_software_docs_mcp.config import (
+    MissingAuthError,
+    format_sources_guide,
+    resolve_auth_headers,
+    validate_source_id,
+)
 from atlas_software_docs_mcp.tools._helpers import format_error
 
 _HEADING_RE = re.compile(r"^(#{1,6})\s+(.+?)\s*$", re.MULTILINE)
@@ -132,9 +137,12 @@ def register(mcp: FastMCP) -> None:
     ) -> str:
         """Fetch one documentation page as Markdown from upstream VCS.
 
-        The repos are public; no auth required. Tries both
-        ``docs/<path>/index.md`` and ``docs/<path>.md`` for directory-style
-        inputs (MkDocs admits both). Falls through 404s.
+        Public sources need no credentials. Auth-gated sources (e.g.
+        ``atlas-computing``, ``atlas-databases``) require the appropriate
+        environment variable to be set (see ``docs://sources``).
+
+        Tries both ``docs/<path>/index.md`` and ``docs/<path>.md`` for
+        directory-style inputs (MkDocs admits both). Falls through 404s.
 
         Args:
             url_or_path: Any of:
@@ -181,14 +189,31 @@ def register(mcp: FastMCP) -> None:
 
         source_obj = sources_registry[source_norm]
 
+        try:
+            auth_headers = resolve_auth_headers(source_obj)
+        except MissingAuthError as exc:
+            return format_error(exc, recovery=[
+                f"Set the environment variable ${exc.env_var} to a valid "
+                "CERN SSO token before fetching from this source.",
+                "Public sources (no auth required): "
+                + ", ".join(
+                    s.id for s in sources_registry.values() if s.auth is None
+                ),
+            ])
+
+        project_path = quote(source_obj.gitlab_project_path, safe="")
         last_error: Exception | None = None
         for path in candidates:
             api_url = (
-                f"{gitlab_api.rstrip('/')}/projects/{quote(source_obj.project_id, safe='')}/"
+                f"{gitlab_api.rstrip('/')}/projects/{project_path}/"
                 f"repository/files/{quote(path, safe='')}/raw"
             )
             try:
-                response = await http.get(api_url, params={"ref": "main"})
+                response = await http.get(
+                    api_url,
+                    params={"ref": "main"},
+                    headers=auth_headers or None,
+                )
             except Exception as exc:  # noqa: BLE001
                 last_error = exc
                 continue
