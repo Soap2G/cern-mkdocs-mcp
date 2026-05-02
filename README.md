@@ -6,8 +6,10 @@ This server exposes two tools an LLM agent can use to discover and read
 documentation from multiple CERN sites (ATLAS software docs, computing docs,
 batch, cloud, ML, SWAN, and more) without crawling.
 
-> **Read-only by design.** No auth, no write tools — all documentation
-> sources are public.
+> **Read-only by design.** No write tools. Public sources need no
+> credentials; auth-gated sources read a token from an environment variable
+> at request time — tokens are never forwarded to the LLM
+> (arcade.dev Secret Injection pattern).
 
 ## Architecture
 
@@ -118,6 +120,97 @@ In `opencode.json`:
 | URI | Description |
 |-----|-------------|
 | `docs://sources` | Lists all registered documentation sources and metadata (URLs, VCS paths, freshness) |
+
+## Configuration
+
+### Source config file
+
+Pass `--config /path/to/docs-sources.json` to point at a custom source
+registry. The bundled `docs_sources.json` is used by default.
+
+Each entry in the `sources` array describes one MkDocs site:
+
+```json
+{
+  "sources": [
+
+    // --- Public source (no credentials needed) ---
+    {
+      "id": "my-public-docs",
+      "name": "My Public Docs",
+      "search_index_url": "https://my-public-docs.example.com/search/search_index.json",
+      "repo_url":         "https://gitlab.example.com/group/my-public-docs",
+      "docs_site_url":    "https://my-public-docs.example.com"
+    },
+
+    // --- Auth-gated source (Bearer / OIDC token) ---
+    {
+      "id": "my-internal-docs",
+      "name": "My Internal Docs",
+      "search_index_url": "https://internal.example.com/search/search_index.json",
+      "repo_url":         "https://gitlab.example.com/group/my-internal-docs",
+      "docs_site_url":    "https://internal.example.com",
+      "auth": {
+        "env_var": "MY_INTERNAL_DOCS_TOKEN"
+      }
+    }
+  ]
+}
+```
+
+Then set the environment variable before starting the server:
+
+```bash
+export MY_INTERNAL_DOCS_TOKEN="<your-token>"
+docs-mcp serve --config my-sources.json
+```
+
+The token is read once per request and attached as
+`Authorization: Bearer <token>`. It is **never** surfaced in tool output
+or passed to the LLM.
+
+#### `auth` block fields
+
+| Field | Default | Description |
+|-------|---------|-------------|
+| `env_var` | *(required)* | Name of the environment variable holding the credential. |
+| `header` | `Authorization` | HTTP header to set. Change to `Private-Token` for GitLab PATs. |
+| `prefix` | `Bearer ` | Prepended to the token value. Set to `""` for raw tokens (e.g. GitLab PATs). |
+
+**GitLab PAT example:**
+
+```json
+"auth": {
+  "env_var":  "MY_GITLAB_PAT",
+  "header":   "Private-Token",
+  "prefix":   ""
+}
+```
+
+#### What happens when the env var is missing
+
+If an LLM calls `search_docs` or `fetch_doc` on an auth-gated source and
+the env var is unset, the tool returns a structured Recovery Guide — no
+exception propagates to the agent:
+
+```
+Recovery steps:
+• Set the environment variable $MY_INTERNAL_DOCS_TOKEN to a valid token
+  before querying this source.
+• Public sources (no auth required): my-public-docs
+```
+
+#### `docs://sources` resource
+
+The MCP resource `docs://sources` lists every registered source and flags
+auth-gated ones with the required env var name — useful for introspection:
+
+```
+Available documentation sources:
+
+  - my-internal-docs       - My Internal Docs  [auth: $MY_INTERNAL_DOCS_TOKEN]
+  - my-public-docs         - My Public Docs
+```
 
 ## Design principles ([arcade.dev](https://www.arcade.dev/patterns) patterns)
 
