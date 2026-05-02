@@ -3,7 +3,7 @@ requires = ["hatchling>=1.26"]
 build-backend = "hatchling.build"
 
 [project]
-name = "atlas-software-docs-mcp"
+name = "cern-mkdocs-mcp"
 authors = [
   { name = "Giovanni Guerrieri", email = "giorgio.ravelli66@gmail.com" },
 ]
@@ -36,17 +36,17 @@ dependencies = [
 ]
 
 [project.scripts]
-docs-mcp = "atlas_software_docs_mcp.cli:main"
+cern-mkdocs-mcp = "cern_mkdocs_mcp.cli:main"
 
 [project.urls]
 Homepage = "https://atlas-software.docs.cern.ch"
-"Bug Tracker" = "https://github.com/atlas-outreach-data-tools/atlas-software-docs-mcp/issues"
+"Bug Tracker" = "https://github.com/atlas-outreach-data-tools/cern-mkdocs-mcp/issues"
 
 [tool.hatch.build.targets.wheel]
-packages = ["src/atlas_software_docs_mcp"]
+packages = ["src/cern_mkdocs_mcp"]
 
 [tool.hatch.build.targets.wheel.force-include]
-"src/atlas_software_docs_mcp/docs_sources.json" = "atlas_software_docs_mcp/docs_sources.json"
+"src/cern_mkdocs_mcp/docs_sources.json" = "cern_mkdocs_mcp/docs_sources.json"
 
 [tool.hatch.build.targets.sdist]
 include = [
@@ -58,7 +58,7 @@ include = [
 ]
 
 [tool.hatch]
-version.path = "src/atlas_software_docs_mcp/__init__.py"
+version.path = "src/cern_mkdocs_mcp/__init__.py"
 
 [tool.hatch.envs.default]
 dependency-groups = ["dev"]
@@ -96,7 +96,7 @@ asyncio_mode = "auto"
 
 
 [tool.coverage]
-run.source = ["atlas_software_docs_mcp"]
+run.source = ["cern_mkdocs_mcp"]
 report.exclude_also = [
   '\.\.\.',
   'if typing.TYPE_CHECKING:',
@@ -113,7 +113,7 @@ disallow_untyped_defs = false
 disallow_incomplete_defs = false
 
 [[tool.mypy.overrides]]
-module = "atlas_software_docs_mcp.*"
+module = "cern_mkdocs_mcp.*"
 disallow_untyped_defs = true
 disallow_incomplete_defs = true
 

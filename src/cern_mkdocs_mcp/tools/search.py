@@ -1,6 +1,6 @@
 """``search_docs`` - keyword search across multiple documentation sources.
 
-Wraps :class:`atlas_software_docs_mcp.tools._index.DocsIndex` (BM25 over
+Wraps :class:`cern_mkdocs_mcp.tools._index.DocsIndex` (BM25 over
 published MkDocs search payloads). Returns token-efficient summaries
 (arcade.dev Response Shaper / Token-Efficient Response): titles, URLs,
 snippets only - no body. The agent retrieves bodies via ``fetch_doc``.
@@ -13,13 +13,13 @@ from typing import Any
 
 from mcp.server.fastmcp import Context, FastMCP  # noqa: TC002
 
-from atlas_software_docs_mcp.config import (
+from cern_mkdocs_mcp.config import (
     MissingAuthError,
     format_sources_guide,
     resolve_auth_headers,
     validate_source_id,
 )
-from atlas_software_docs_mcp.tools._helpers import format_error
+from cern_mkdocs_mcp.tools._helpers import format_error
 
 _MAX_LIMIT = 25
 

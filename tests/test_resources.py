@@ -5,8 +5,8 @@ from __future__ import annotations
 from typing import Any
 from unittest.mock import MagicMock
 
-from atlas_software_docs_mcp.config import DocSource
-from atlas_software_docs_mcp.resources import register
+from cern_mkdocs_mcp.config import DocSource
+from cern_mkdocs_mcp.resources import register
 
 
 def _capture_resource(mcp: MagicMock) -> list[dict[str, Any]]:

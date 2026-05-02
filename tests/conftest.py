@@ -6,8 +6,8 @@ from unittest.mock import AsyncMock, MagicMock
 import httpx
 import pytest
 
-from atlas_software_docs_mcp.config import AuthConfig, DocSource
-from atlas_software_docs_mcp.tools._index import DocsIndex
+from cern_mkdocs_mcp.config import AuthConfig, DocSource
+from cern_mkdocs_mcp.tools._index import DocsIndex
 
 
 @pytest.fixture

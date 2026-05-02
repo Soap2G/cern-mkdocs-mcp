@@ -6,7 +6,7 @@ import json
 from typing import Any
 from unittest.mock import MagicMock
 
-from atlas_software_docs_mcp.tools.fetch import (
+from cern_mkdocs_mcp.tools.fetch import (
     _candidate_source_paths,
     _extract_section,
     _make_outline,

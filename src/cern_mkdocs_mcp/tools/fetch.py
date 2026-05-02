@@ -23,13 +23,13 @@ from urllib.parse import quote, urlparse
 
 from mcp.server.fastmcp import Context, FastMCP  # noqa: TC002
 
-from atlas_software_docs_mcp.config import (
+from cern_mkdocs_mcp.config import (
     MissingAuthError,
     format_sources_guide,
     resolve_auth_headers,
     validate_source_id,
 )
-from atlas_software_docs_mcp.tools._helpers import format_error
+from cern_mkdocs_mcp.tools._helpers import format_error
 
 _HEADING_RE = re.compile(r"^(#{1,6})\s+(.+?)\s*$", re.MULTILINE)
 _OUTLINE_MAX_LEVEL = 3

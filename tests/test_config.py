@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import pytest
 
-from atlas_software_docs_mcp.config import (
+from cern_mkdocs_mcp.config import (
     AuthConfig,
     DocSource,
     MissingAuthError,

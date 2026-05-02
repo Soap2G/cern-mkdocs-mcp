@@ -1,9 +1,9 @@
-# atlas-software-docs-mcp — Contributor Guide
+# cern-mkcern-mkdocs-mcp — Contributor Guide
 
 ## Architecture
 
 ```
-LLM <--MCP/stdio|HTTP--> atlas-software-docs-mcp serve
+LLM <--MCP/stdio|HTTP--> cern-mkcern-mkdocs-mcp serve
                               |
                               +-- /search/search_index.json   (cached, BM25)
                               |     atlas-software.docs.cern.ch
@@ -25,9 +25,9 @@ The server has two backends:
 ## Project layout
 
 ```
-src/atlas_software_docs_mcp/
+src/cern_mkdocs_mcp/
 ├── __init__.py           # Package version
-├── cli.py                # argparse CLI: `atlas-software-docs-mcp serve`
+├── cli.py                # argparse CLI: `cern-mkcern-mkdocs-mcp serve`
 ├── server.py             # FastMCP setup, lifespan, defaults
 ├── nomenclature.py       # ATLAS_SOFTWARE_DOCS_GUIDE (resource + instructions)
 ├── resources.py          # MCP resource registration
@@ -108,11 +108,11 @@ backend — call it before searching. It is idempotent and TTL-cached
 
 ## Adding a new tool
 
-1. Create `src/atlas_software_docs_mcp/tools/my_module.py` with a
+1. Create `src/cern_mkdocs_mcp/tools/my_module.py` with a
    `register(mcp)` function.
 2. Import and register in `server.py`:
    ```python
-   from atlas_software_docs_mcp.tools import my_module
+   from cern_mkdocs_mcp.tools import my_module
    for _module in [search, fetch, my_module]:
    ```
 3. Add tests in `tests/test_tools_my_module.py`.

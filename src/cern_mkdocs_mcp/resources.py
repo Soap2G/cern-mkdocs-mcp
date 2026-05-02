@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from mcp.server.fastmcp import FastMCP  # noqa: TC002
 
-from atlas_software_docs_mcp.config import DocSource
+from cern_mkdocs_mcp.config import DocSource
 
 
 def _format_sources(sources: dict[str, DocSource]) -> str:

@@ -1,4 +1,4 @@
-# docs-mcp
+# cern-mkdocs-mcp
 
 MCP Server for searching multiple MkDocs-based documentation sites via a unified interface.
 
@@ -14,7 +14,7 @@ batch, cloud, ML, SWAN, and more) without crawling.
 ## Architecture
 
 ```
-LLM <--MCP/stdio|HTTP--> docs-mcp serve
+LLM <--MCP/stdio|HTTP--> cern-mkdocs-mcp serve
                             |
                             +-- Multiple doc sources:
                             |   +-- search_index.json (cached, BM25)
@@ -38,7 +38,7 @@ on demand.
 ## Installation
 
 ```bash
-pip install docs-mcp
+pip install cern-mkdocs-mcp
 ```
 
 Or with pixi:
@@ -52,19 +52,19 @@ pixi install
 ### As an MCP server (stdio)
 
 ```bash
-docs-mcp serve
+cern-mkdocs-mcp serve
 ```
 
 Or with a custom config file:
 
 ```bash
-docs-mcp serve --config /path/to/docs-sources.json
+cern-mkdocs-mcp serve --config /path/to/docs-sources.json
 ```
 
 ### As a remote MCP (Streamable HTTP)
 
 ```bash
-docs-mcp serve --transport streamable-http --port 8000
+cern-mkdocs-mcp serve --transport streamable-http --port 8000
 ```
 
 This is the deployment shape used by MCP servers at `*.app.cern.ch/mcp`.
@@ -75,7 +75,7 @@ This is the deployment shape used by MCP servers at `*.app.cern.ch/mcp`.
 {
   "mcpServers": {
     "docs": {
-      "command": "docs-mcp",
+      "command": "cern-mkdocs-mcp",
       "args": ["serve"]
     }
   }
@@ -90,7 +90,7 @@ In `opencode.json`:
 "mcp": {
   "docs": {
     "type": "remote",
-    "url": "https://docs-mcp.app.cern.ch/mcp",
+    "url": "https://cern-mkdocs-mcp.app.cern.ch/mcp",
     "oauth": false
   }
 }
@@ -162,7 +162,7 @@ Then set the environment variable before starting the server:
 
 ```bash
 export MY_INTERNAL_DOCS_TOKEN="<your-token>"
-docs-mcp serve --config my-sources.json
+cern-mkdocs-mcp serve --config my-sources.json
 ```
 
 The token is read once per request and attached as
@@ -261,7 +261,7 @@ and the GitLab raw fetcher is mocked. No CERN network access required.
 
 | MCP | Scope |
 |-----|-------|
-| `docs-mcp` (this) | Multi-source: ATLAS software/computing/databases, Batch, Cloud, ML@CERN, SWAN |
+| `cern-mkdocs-mcp` (this) | Multi-source: ATLAS software/computing/databases, Batch, Cloud, ML@CERN, SWAN |
 | [`cernopendata-mcp`](../cernopendata-mcp) | CERN Open Data portal records, files, glossary |
 | [`atlasopenmagic-mcp`](../atlasopenmagic-mcp) | ATLAS metadata catalogue (AMI), dataset / run-list lookups |
 

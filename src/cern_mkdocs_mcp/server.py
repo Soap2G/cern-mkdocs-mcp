@@ -11,15 +11,15 @@ if TYPE_CHECKING:
     from collections.abc import AsyncGenerator
     from pathlib import Path
 
-from atlas_software_docs_mcp.config import (
+from cern_mkdocs_mcp.config import (
     DocSource,
     get_default_sources,
     load_sources,
 )
-from atlas_software_docs_mcp.nomenclature import ATLAS_SOFTWARE_DOCS_GUIDE
-from atlas_software_docs_mcp.resources import register as register_resources
-from atlas_software_docs_mcp.tools import fetch, search
-from atlas_software_docs_mcp.tools._index import DocsIndex
+from cern_mkdocs_mcp.nomenclature import ATLAS_SOFTWARE_DOCS_GUIDE
+from cern_mkdocs_mcp.resources import register as register_resources
+from cern_mkdocs_mcp.tools import fetch, search
+from cern_mkdocs_mcp.tools._index import DocsIndex
 
 DEFAULT_GITLAB_API = "https://gitlab.cern.ch/api/v4"
 

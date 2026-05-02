@@ -5,7 +5,7 @@ from __future__ import annotations
 import argparse
 from pathlib import Path
 
-from atlas_software_docs_mcp.server import serve
+from cern_mkdocs_mcp.server import serve
 
 
 def main() -> None:

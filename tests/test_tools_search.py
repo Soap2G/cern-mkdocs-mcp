@@ -6,7 +6,7 @@ import json
 from typing import Any
 from unittest.mock import MagicMock
 
-from atlas_software_docs_mcp.tools.search import register
+from cern_mkdocs_mcp.tools.search import register
 from tests.conftest import capture_tools
 
 SAMPLE_PAYLOAD = {
