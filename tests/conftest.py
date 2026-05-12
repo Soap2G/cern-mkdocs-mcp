@@ -7,6 +7,7 @@ import httpx
 import pytest
 
 from cern_mkdocs_mcp.config import AuthConfig, DocSource
+from cern_mkdocs_mcp.tools._gitbook_index import GitBookIndex
 from cern_mkdocs_mcp.tools._index import DocsIndex
 
 
@@ -96,16 +97,39 @@ def sample_sources() -> dict[str, DocSource]:
             docs_site_url="https://atlas-computing.docs.cern.ch",
             auth=AuthConfig(env_var="DOCS_MCP_CERN_SSO_TOKEN"),
         ),
+        "fts": DocSource(
+            id="fts",
+            name="FTS3 (File Transfer Service)",
+            repo_url="https://gitlab.cern.ch/fts/documentation",
+            docs_site_url="https://fts3-docs.web.cern.ch/fts3-docs",
+            source_type="gitbook",
+            summary_path="SUMMARY.md",
+            default_branch="master",
+        ),
     }
 
 
 @pytest.fixture
-def sample_indices(sample_sources: dict[str, DocSource]) -> dict[str, DocsIndex]:
-    """One empty DocsIndex per sample source, keyed by source id."""
-    return {
-        sid: DocsIndex(search_index_url=src.search_index_url)
-        for sid, src in sample_sources.items()
-    }
+def sample_indices(
+    sample_sources: dict[str, DocSource],
+) -> dict[str, DocsIndex | GitBookIndex]:
+    """One empty index per sample source, keyed by source id.
+
+    Picks the right backend based on each source's ``source_type``.
+    """
+    out: dict[str, DocsIndex | GitBookIndex] = {}
+    for sid, src in sample_sources.items():
+        if src.source_type == "gitbook":
+            out[sid] = GitBookIndex(
+                repo_path=src.gitlab_project_path,
+                docs_site_url=src.docs_site_url,
+                gitlab_api="https://gitlab.cern.ch/api/v4",
+                summary_path=src.summary_path,
+                default_branch=src.default_branch,
+            )
+        else:
+            out[sid] = DocsIndex(search_index_url=src.search_index_url)
+    return out
 
 
 @pytest.fixture

@@ -38,6 +38,9 @@ _OUTLINE_MAX_LEVEL = 3
 def _candidate_source_paths(url_or_path: str) -> list[str]:
     """Map a docs URL or relative path to candidate ``docs/...`` paths.
 
+    MkDocs convention only. For GitBook sources see
+    :func:`_candidate_gitbook_paths`.
+
     Handles three input shapes:
     - Rendered URL: ``https://example.docs.cern.ch/analysis/grid/``
     - Relative path: ``analysis/grid/`` or ``/analysis/grid/``
@@ -61,6 +64,56 @@ def _candidate_source_paths(url_or_path: str) -> list[str]:
     if path.endswith(".md"):
         return [f"docs/{path}"]
     return [f"docs/{path}/index.md", f"docs/{path}.md"]
+
+
+def _candidate_gitbook_paths(
+    url_or_path: str,
+    docs_site_url: str,
+) -> list[str]:
+    """Map a GitBook URL or path to candidate source ``.md`` paths.
+
+    GitBook output is 1-to-1 with source: ``foo/bar.md`` renders as
+    ``foo/bar.html``; ``README.md`` at any level renders as
+    ``index.html`` for that directory.
+
+    Handles three input shapes:
+    - Rendered URL: ``https://fts3-docs.web.cern.ch/fts3-docs/docs/overview.html``
+    - Relative path: ``docs/overview.html`` or ``docs/overview.md``
+    - Repo-root README: ``index.html``, empty string, or just the site URL
+    """
+    raw = url_or_path.strip()
+    if not raw:
+        return []
+    parsed = urlparse(raw)
+    if parsed.scheme:
+        path = parsed.path
+    else:
+        path = raw
+    path = path.split("#", 1)[0].split("?", 1)[0]
+
+    # If the URL had a scheme, strip any GitBook docs_site_url base path
+    # (e.g. "/fts3-docs/") so we're left with the doc-relative portion.
+    if parsed.scheme:
+        site_base = urlparse(docs_site_url).path.rstrip("/")
+        if site_base and path.startswith(site_base + "/"):
+            path = path[len(site_base):]
+        elif site_base and path == site_base:
+            path = ""
+
+    path = path.strip("/")
+    if not path or path == "index.html":
+        return ["README.md"]
+    if path.endswith("/index.html"):
+        inner = path[: -len("/index.html")]
+        return [f"{inner}/README.md"]
+    if path.endswith(".html"):
+        return [path[: -len(".html")] + ".md"]
+    if path.endswith(".md"):
+        return [path]
+    # Bare directory like "docs/install/" — GitBook directories don't
+    # render to .html, so the most likely meaning is the README in that
+    # directory.
+    return [f"{path}/README.md"]
 
 
 def _make_outline(markdown: str) -> list[dict[str, Any]]:
@@ -111,7 +164,7 @@ def _project(markdown: str, mode: str) -> dict[str, Any]:
 
 
 def _rendered_url(docs_base: str, source_path: str) -> str:
-    """Map a ``docs/<path>`` source path back to its rendered URL."""
+    """Map a ``docs/<path>`` source path back to its rendered URL (MkDocs)."""
     inner = source_path[len("docs/"):] if source_path.startswith("docs/") else source_path
     inner = inner.removesuffix(".md")
     if inner == "index":
@@ -122,6 +175,19 @@ def _rendered_url(docs_base: str, source_path: str) -> str:
     if not inner:
         return f"{base}/"
     return f"{base}/{inner}/"
+
+
+def _rendered_url_gitbook(docs_base: str, source_path: str) -> str:
+    """Map a GitBook ``.md`` source path back to its rendered URL."""
+    base = docs_base.rstrip("/")
+    if source_path == "README.md":
+        return f"{base}/index.html"
+    if source_path.endswith("/README.md"):
+        inner = source_path[: -len("README.md")] + "index.html"
+        return f"{base}/{inner}"
+    if source_path.endswith(".md"):
+        return f"{base}/{source_path[: -len('.md')]}.html"
+    return f"{base}/{source_path}"
 
 
 def register(mcp: FastMCP) -> None:
@@ -152,7 +218,7 @@ def register(mcp: FastMCP) -> None:
                 - A direct ``.md`` source path, e.g. ``analysis/grid.md``
             source: Documentation source ID. One of:
                 ``atlas-sft``, ``atlas-computing``, ``atlas-databases``,
-                ``batch``, ``cloud``, ``ml``, ``swan``.
+                ``batch``, ``cloud``, ``ml``, ``swan``, ``fts``.
                 Default: ``atlas-sft`` (ATLAS Software).
             mode: Output projection.
                 - ``"markdown"`` (default): full body.
@@ -163,16 +229,6 @@ def register(mcp: FastMCP) -> None:
                   ``"sections:Build"``.
         """
         source_norm = source.strip().lower() if source else "atlas-sft"
-        candidates = _candidate_source_paths(url_or_path)
-        if not candidates:
-            return format_error(
-                ValueError(f"Could not derive a source path from {url_or_path!r}"),
-                recovery=[
-                    "Pass a URL like https://example.docs.cern.ch/<path>/",
-                    "or a relative path like 'athena/configuration/'.",
-                    "Use search_docs(query=..., source=...) to find a valid URL first.",
-                ],
-            )
 
         ctxd = ctx.request_context.lifespan_context
         http = ctxd["http"]
@@ -188,6 +244,25 @@ def register(mcp: FastMCP) -> None:
             ])
 
         source_obj = sources_registry[source_norm]
+
+        if source_obj.source_type == "gitbook":
+            candidates = _candidate_gitbook_paths(
+                url_or_path, source_obj.docs_site_url,
+            )
+            render_url = _rendered_url_gitbook
+        else:
+            candidates = _candidate_source_paths(url_or_path)
+            render_url = _rendered_url
+
+        if not candidates:
+            return format_error(
+                ValueError(f"Could not derive a source path from {url_or_path!r}"),
+                recovery=[
+                    "Pass a URL like https://example.docs.cern.ch/<path>/",
+                    "or a relative path like 'athena/configuration/'.",
+                    "Use search_docs(query=..., source=...) to find a valid URL first.",
+                ],
+            )
 
         try:
             auth_headers = resolve_auth_headers(source_obj)
@@ -211,7 +286,7 @@ def register(mcp: FastMCP) -> None:
             try:
                 response = await http.get(
                     api_url,
-                    params={"ref": "main"},
+                    params={"ref": source_obj.default_branch},
                     headers=auth_headers or None,
                 )
             except Exception as exc:  # noqa: BLE001
@@ -231,7 +306,7 @@ def register(mcp: FastMCP) -> None:
                 {
                     "source": source_norm,
                     "source_path": path,
-                    "url": _rendered_url(source_obj.docs_site_url, path),
+                    "url": render_url(source_obj.docs_site_url, path),
                     **projection,
                 },
                 default=str,
@@ -240,7 +315,7 @@ def register(mcp: FastMCP) -> None:
         return format_error(
             last_error or FileNotFoundError("No matching source file"),
             recovery=[
-                f"Tried {len(candidates)} candidate path(s) under docs/ - none resolved.",
+                f"Tried {len(candidates)} candidate path(s) - none resolved.",
                 "Use search_docs(query=..., source=...) to find the correct URL first, "
                 "then re-call fetch with that URL.",
             ],

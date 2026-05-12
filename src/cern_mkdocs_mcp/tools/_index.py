@@ -9,6 +9,10 @@ We deliberately do **not** re-implement the Lunr index that lives inside
 the JSON payload's ``index`` key. BM25 over the same ``docs`` array gives
 us better recall on multi-token queries, with one well-maintained
 dependency (``rank_bm25``).
+
+Module-level helpers (``_tokenize``, ``_make_snippet``, ``_section_of``,
+``_strip_anchor``, ``_absolute_url``) are also reused by the GitBook
+backend in :mod:`cern_mkdocs_mcp.tools._gitbook_index`.
 """
 
 from __future__ import annotations
@@ -22,7 +26,8 @@ from rank_bm25 import BM25Okapi
 if TYPE_CHECKING:
     import httpx
 
-_TTL_SECONDS = 24 * 3600
+TTL_SECONDS = 24 * 3600
+_TTL_SECONDS = TTL_SECONDS  # back-compat alias
 _TOKEN_RE = re.compile(r"[A-Za-z0-9_]+")
 _SNIPPET_WORDS = 32
 _PUNCT_STRIP = ".,;:()[]{}!?\"'`"

@@ -12,31 +12,44 @@ LLM <--MCP/stdio|HTTP--> cern-mkcern-mkdocs-mcp serve
                                     gitlab.cern.ch/api/v4
 ```
 
-The server has two backends:
+The server has three backends, selected per source:
 
-- **MkDocs search payload** — `https://atlas-software.docs.cern.ch/search/search_index.json`,
-  refreshed at most every 24 h. We build an in-memory BM25 ranker over
-  the per-page `title + text` blobs in that payload (one ranker per
-  process, lazy-loaded). We deliberately do not reuse the Lunr index
-  embedded in the JSON.
-- **GitLab Files Raw API** — `https://gitlab.cern.ch/api/v4/projects/202647/repository/files/<path>/raw?ref=main`.
-  Public project, no token.
+- **MkDocs search payload** (`source_type: "mkdocs"`) —
+  `<docs_site_url>/search/search_index.json`, refreshed at most every
+  24 h. We build an in-memory BM25 ranker over the per-page
+  `title + text` blobs in that payload (one ranker per process,
+  lazy-loaded). We deliberately do not reuse the Lunr index embedded
+  in the JSON. Used by: atlas-sft, atlas-computing, atlas-databases,
+  batch, cloud, ml, swan.
+- **GitBook SUMMARY walker** (`source_type: "gitbook"`) — for legacy
+  GitBook v2 / CLI sites that ship no search payload. The indexer
+  fetches `SUMMARY.md` from the upstream repo, parses its `[title](path)`
+  markdown links, fetches every referenced `.md` from the GitLab Files
+  API (bounded concurrency), and builds BM25 over the title + plain-text
+  body. Same 24-h TTL. Used by: fts.
+- **GitLab Files Raw API** — `https://gitlab.cern.ch/api/v4/projects/<encoded-path>/repository/files/<path>/raw?ref=<branch>`.
+  Public projects, no token; auth-gated projects use the per-source
+  `auth` config. The `ref` query parameter comes from
+  `DocSource.default_branch` (default `main`; FTS GitBook is on `master`).
 
 ## Project layout
 
 ```
 src/cern_mkdocs_mcp/
-├── __init__.py           # Package version
-├── cli.py                # argparse CLI: `cern-mkcern-mkdocs-mcp serve`
-├── server.py             # FastMCP setup, lifespan, defaults
-├── nomenclature.py       # ATLAS_SOFTWARE_DOCS_GUIDE (resource + instructions)
-├── resources.py          # MCP resource registration
+├── __init__.py             # Package version
+├── cli.py                  # argparse CLI: `cern-mkdocs-mcp serve`
+├── config.py               # DocSource dataclass + load_sources
+├── docs_sources.json       # Bundled default source registry
+├── server.py               # FastMCP setup, lifespan, picks index backend per source
+├── nomenclature.py         # ATLAS_SOFTWARE_DOCS_GUIDE (resource + instructions)
+├── resources.py            # MCP resource registration (docs://sources)
 └── tools/
     ├── __init__.py
-    ├── _helpers.py       # format_error (Recovery Guide pattern)
-    ├── _index.py         # DocsIndex: BM25 over the published MkDocs payload
-    ├── search.py         # search_atlas_software_docs
-    └── fetch.py          # fetch_atlas_software_doc (markdown / outline / sections)
+    ├── _helpers.py         # format_error (Recovery Guide pattern)
+    ├── _index.py           # DocsIndex: BM25 over the published MkDocs payload
+    ├── _gitbook_index.py   # GitBookIndex: BM25 over a SUMMARY.md walk
+    ├── search.py           # search_docs (multi-source)
+    └── fetch.py            # fetch_doc (markdown / outline / sections; mkdocs + gitbook resolvers)
 ```
 
 ## Key conventions

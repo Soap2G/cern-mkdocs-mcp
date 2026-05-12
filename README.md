@@ -1,10 +1,10 @@
 # cern-mkdocs-mcp
 
-MCP Server for searching multiple MkDocs-based documentation sites via a unified interface.
+MCP Server for searching multiple CERN documentation sites via a unified interface. Supports two site shapes: **MkDocs** (BM25 over the published `search_index.json`) and legacy **GitBook v2/CLI** (BM25 over the markdown files listed in `SUMMARY.md`, walked once per 24 h).
 
 This server exposes two tools an LLM agent can use to discover and read
-documentation from multiple CERN sites (ATLAS software docs, computing docs,
-batch, cloud, ML, SWAN, and more) without crawling.
+documentation from multiple CERN sites (ATLAS software, computing, databases,
+batch, cloud, ML@CERN, SWAN, FTS3, and more) without crawling.
 
 > **Read-only by design.** No write tools. Public sources need no
 > credentials; auth-gated sources read a token from an environment variable
@@ -16,24 +16,24 @@ batch, cloud, ML, SWAN, and more) without crawling.
 ```
 LLM <--MCP/stdio|HTTP--> cern-mkdocs-mcp serve
                             |
-                            +-- Multiple doc sources:
-                            |   +-- search_index.json (cached, BM25)
-                            |   +-- https://atlas-software.docs.cern.ch
-                            |   +-- https://atlas-computing.docs.cern.ch
-                            |   +-- https://atlas-databases.docs.cern.ch
-                            |   +-- https://batchdocs.web.cern.ch
-                            |   +-- https://clouddocs.web.cern.ch
-                            |   +-- https://ml.docs.cern.ch
-                            |   +-- https://swan.docs.cern.ch
+                            +-- MkDocs sources (search_index.json -> BM25)
+                            |   +-- atlas-sft, atlas-computing, atlas-databases
+                            |   +-- batch, cloud, ml, swan
                             |
-                            +-- GitLab/GitHub Raw API (live)
+                            +-- GitBook sources (SUMMARY.md walk -> BM25)
+                            |   +-- fts
+                            |
+                            +-- GitLab Files Raw API (live, on demand)
                                   https://gitlab.cern.ch/api/v4/...
 ```
 
 Each MkDocs site publishes a search payload at `/search/search_index.json`.
 The server downloads each index once per 24 h, builds in-memory BM25 rankers,
-and serves search hits from them. Markdown bodies are pulled live from VCS
-on demand.
+and serves search hits from them. GitBook sites (no search payload) are
+indexed by walking `SUMMARY.md`, fetching each linked `.md` page from the
+GitLab Files API in parallel (concurrency-limited), and building the BM25
+ranker over title+body — also refreshed at most every 24 h. Markdown bodies
+are pulled live from VCS on demand for both backends.
 
 ## Installation
 
@@ -105,15 +105,16 @@ In `opencode.json`:
 
 ### Supported doc sources
 
-| Source ID | Documentation |
-|-----------|---------------|
-| `atlas-sft` | [ATLAS software/Athena](https://atlas-software.docs.cern.ch) |
-| `atlas-computing` | [ATLAS computing guide](https://atlas-computing.docs.cern.ch) |
-| `atlas-databases` | [ATLAS databases](https://atlas-databases.docs.cern.ch) |
-| `batch` | [HTCondor Batch](https://batchdocs.web.cern.ch) |
-| `cloud` | [CERN Cloud](https://clouddocs.web.cern.ch) |
-| `ml` | [ML@CERN](https://ml.docs.cern.ch) |
-| `swan` | [SWAN (Jupyter)](https://swan.docs.cern.ch) |
+| Source ID | Documentation | Backend |
+|-----------|---------------|---------|
+| `atlas-sft` | [ATLAS software/Athena](https://atlas-software.docs.cern.ch) | MkDocs |
+| `atlas-computing` | [ATLAS computing guide](https://atlas-computing.docs.cern.ch) | MkDocs (auth-gated) |
+| `atlas-databases` | [ATLAS databases](https://atlas-databases.docs.cern.ch) | MkDocs (auth-gated) |
+| `batch` | [HTCondor Batch](https://batchdocs.web.cern.ch) | MkDocs |
+| `cloud` | [CERN Cloud](https://clouddocs.web.cern.ch) | MkDocs |
+| `ml` | [ML@CERN](https://ml.docs.cern.ch) | MkDocs |
+| `swan` | [SWAN (Jupyter)](https://swan.docs.cern.ch) | MkDocs |
+| `fts` | [FTS3 (File Transfer Service)](https://fts3-docs.web.cern.ch/fts3-docs/) | GitBook (legacy CLI) |
 
 ## Available resources
 
@@ -134,7 +135,7 @@ Each entry in the `sources` array describes one MkDocs site:
 {
   "sources": [
 
-    // --- Public source (no credentials needed) ---
+    // --- MkDocs public source (no credentials needed) ---
     {
       "id": "my-public-docs",
       "name": "My Public Docs",
@@ -143,7 +144,7 @@ Each entry in the `sources` array describes one MkDocs site:
       "docs_site_url":    "https://my-public-docs.example.com"
     },
 
-    // --- Auth-gated source (Bearer / OIDC token) ---
+    // --- MkDocs auth-gated source (Bearer / OIDC token) ---
     {
       "id": "my-internal-docs",
       "name": "My Internal Docs",
@@ -153,10 +154,26 @@ Each entry in the `sources` array describes one MkDocs site:
       "auth": {
         "env_var": "MY_INTERNAL_DOCS_TOKEN"
       }
+    },
+
+    // --- GitBook source (legacy CLI v2; walks SUMMARY.md) ---
+    {
+      "id": "my-gitbook-docs",
+      "name": "My GitBook Docs",
+      "source_type":    "gitbook",
+      "repo_url":       "https://gitlab.example.com/group/my-gitbook-docs",
+      "docs_site_url":  "https://my-gitbook-docs.example.com",
+      "summary_path":   "SUMMARY.md",
+      "default_branch": "master"
     }
   ]
 }
 ```
+
+For `source_type: "gitbook"`, `search_index_url` is omitted. The indexer
+walks `summary_path` (default `SUMMARY.md`) in the repo to discover pages.
+Set `default_branch` to whatever ref holds the rendered output (legacy
+GitBook repos commonly use `master`; MkDocs sources default to `main`).
 
 Then set the environment variable before starting the server:
 

@@ -8,6 +8,7 @@ from cern_mkdocs_mcp.config import (
     AuthConfig,
     DocSource,
     MissingAuthError,
+    load_sources,
     parse_repo_path,
     resolve_auth_headers,
 )
@@ -138,3 +139,50 @@ class TestMissingAuthError:
     def test_is_exception(self) -> None:
         with pytest.raises(MissingAuthError):
             raise MissingAuthError("x", "Y")
+
+
+class TestLoadSourcesSourceType:
+    def test_mkdocs_default(self, tmp_path: pytest.TempPathFactory) -> None:
+        p = tmp_path / "s.json"  # type: ignore[attr-defined]
+        p.write_text(
+            '{"sources": [{"id":"a","name":"A","repo_url":"https://x/y/z",'
+            '"docs_site_url":"https://x","search_index_url":"https://x/s.json"}]}'
+        )
+        sources = load_sources(p)
+        assert sources["a"].source_type == "mkdocs"
+        assert sources["a"].default_branch == "main"
+
+    def test_gitbook_explicit(self, tmp_path: pytest.TempPathFactory) -> None:
+        p = tmp_path / "s.json"  # type: ignore[attr-defined]
+        p.write_text(
+            '{"sources": [{"id":"fts","name":"FTS","repo_url":"https://x/y/z",'
+            '"docs_site_url":"https://x","source_type":"gitbook",'
+            '"default_branch":"master","summary_path":"SUMMARY.md"}]}'
+        )
+        sources = load_sources(p)
+        assert sources["fts"].source_type == "gitbook"
+        assert sources["fts"].default_branch == "master"
+        assert sources["fts"].summary_path == "SUMMARY.md"
+        assert sources["fts"].search_index_url is None
+
+    def test_unknown_source_type_rejected(
+        self, tmp_path: pytest.TempPathFactory,
+    ) -> None:
+        p = tmp_path / "s.json"  # type: ignore[attr-defined]
+        p.write_text(
+            '{"sources":[{"id":"x","name":"X","repo_url":"https://a/b/c",'
+            '"docs_site_url":"https://x","source_type":"sphinx"}]}'
+        )
+        with pytest.raises(ValueError, match="source_type"):
+            load_sources(p)
+
+    def test_mkdocs_requires_search_index_url(
+        self, tmp_path: pytest.TempPathFactory,
+    ) -> None:
+        p = tmp_path / "s.json"  # type: ignore[attr-defined]
+        p.write_text(
+            '{"sources":[{"id":"x","name":"X","repo_url":"https://a/b/c",'
+            '"docs_site_url":"https://x"}]}'
+        )
+        with pytest.raises(ValueError, match="search_index_url"):
+            load_sources(p)

@@ -65,22 +65,48 @@ class DocSource:
     The GitLab project path is derived from :attr:`repo_url` on demand
     (see :attr:`gitlab_project_path`), so callers do not need to know
     or supply numeric GitLab project ids.
+
+    Two ``source_type`` flavours are supported:
+
+    - ``"mkdocs"`` (default) — the site publishes ``/search/search_index.json``;
+      sources are stored under a ``docs/`` directory; the rendered URL strips
+      the ``docs/`` prefix and the ``.md`` suffix. Used for atlas-sft, batch,
+      cloud, ml, swan, atlas-computing, atlas-databases.
+    - ``"gitbook"`` — legacy GitBook (v2/CLI) site with a ``SUMMARY.md`` table
+      of contents; source paths render 1-to-1 with ``.md → .html``; no
+      published search index, so the indexer walks SUMMARY.md and pulls each
+      referenced page. Used for fts (File Transfer Service docs).
     """
 
     id: str
-    """Unique identifier (e.g. ``'atlas-sft'``, ``'batch'``)."""
+    """Unique identifier (e.g. ``'atlas-sft'``, ``'batch'``, ``'fts'``)."""
 
     name: str
     """Display name."""
-
-    search_index_url: str
-    """URL of the published MkDocs ``search_index.json``."""
 
     repo_url: str
     """Public URL of the source repository (e.g. a GitLab project URL)."""
 
     docs_site_url: str
     """Base URL of the rendered documentation site."""
+
+    search_index_url: str | None = None
+    """URL of the published MkDocs ``search_index.json``.
+
+    Required for ``source_type="mkdocs"``. Unused for ``"gitbook"`` (the
+    indexer walks SUMMARY.md instead)."""
+
+    source_type: str = "mkdocs"
+    """One of ``"mkdocs"`` or ``"gitbook"``. Picks the index/fetch
+    backend at lifespan time."""
+
+    summary_path: str = "SUMMARY.md"
+    """Path (within the repo) to the GitBook table of contents. Only
+    consulted when ``source_type="gitbook"``."""
+
+    default_branch: str = "main"
+    """Git ref used by ``fetch_doc`` against the GitLab Files API.
+    MkDocs sources here all use ``main``; GitBook FTS docs use ``master``."""
 
     auth: AuthConfig | None = None
     """Auth config for protected sources, or ``None`` for public ones."""
@@ -173,9 +199,12 @@ def load_sources(config_path: str | Path) -> dict[str, DocSource]:
         {
           "id": "...",
           "name": "...",
-          "search_index_url": "...",
           "repo_url": "...",
           "docs_site_url": "...",
+          "source_type":   "mkdocs",       // optional, default "mkdocs"
+          "search_index_url": "...",       // required for "mkdocs"
+          "summary_path":  "SUMMARY.md",   // optional, used only for "gitbook"
+          "default_branch": "main",        // optional, default "main"
           "auth": {
             "env_var": "...",
             "header": "...",     // optional, default "Authorization"
@@ -204,12 +233,28 @@ def load_sources(config_path: str | Path) -> dict[str, DocSource]:
                     header=auth_data.get("header", "Authorization"),
                     prefix=auth_data.get("prefix", "Bearer "),
                 )
+            source_type = item.get("source_type", "mkdocs")
+            if source_type not in ("mkdocs", "gitbook"):
+                msg = (
+                    f"source {item.get('id')!r}: source_type "
+                    f"{source_type!r} not in {{'mkdocs', 'gitbook'}}"
+                )
+                raise ValueError(msg)
+            if source_type == "mkdocs" and not item.get("search_index_url"):
+                msg = (
+                    f"source {item.get('id')!r}: source_type='mkdocs' "
+                    "requires search_index_url"
+                )
+                raise ValueError(msg)
             source = DocSource(
                 id=item["id"],
                 name=item["name"],
-                search_index_url=item["search_index_url"],
                 repo_url=item["repo_url"],
                 docs_site_url=item["docs_site_url"],
+                search_index_url=item.get("search_index_url"),
+                source_type=source_type,
+                summary_path=item.get("summary_path", "SUMMARY.md"),
+                default_branch=item.get("default_branch", "main"),
                 auth=auth,
             )
             sources[source.id] = source

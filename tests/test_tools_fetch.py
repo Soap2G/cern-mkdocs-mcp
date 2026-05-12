@@ -7,10 +7,12 @@ from typing import Any
 from unittest.mock import MagicMock
 
 from cern_mkdocs_mcp.tools.fetch import (
+    _candidate_gitbook_paths,
     _candidate_source_paths,
     _extract_section,
     _make_outline,
     _rendered_url,
+    _rendered_url_gitbook,
     register,
 )
 from tests.conftest import capture_tools
@@ -364,3 +366,156 @@ class TestFetchTool:
         # headers kwarg is either absent, None, or an empty dict
         called_headers = mock_http.get.call_args.kwargs.get("headers")
         assert not called_headers  # None or {}
+
+
+class TestGitBookCandidatePaths:
+    SITE = "https://fts3-docs.web.cern.ch/fts3-docs"
+
+    def test_root_url(self) -> None:
+        assert _candidate_gitbook_paths(self.SITE + "/", self.SITE) == ["README.md"]
+        assert _candidate_gitbook_paths(self.SITE, self.SITE) == ["README.md"]
+
+    def test_index_html_at_root(self) -> None:
+        assert _candidate_gitbook_paths(
+            self.SITE + "/index.html", self.SITE,
+        ) == ["README.md"]
+
+    def test_rendered_url_with_base_path(self) -> None:
+        assert _candidate_gitbook_paths(
+            self.SITE + "/docs/overview.html", self.SITE,
+        ) == ["docs/overview.md"]
+
+    def test_relative_html_path(self) -> None:
+        assert _candidate_gitbook_paths(
+            "docs/overview.html", self.SITE,
+        ) == ["docs/overview.md"]
+
+    def test_relative_md_path_passthrough(self) -> None:
+        assert _candidate_gitbook_paths(
+            "docs/overview.md", self.SITE,
+        ) == ["docs/overview.md"]
+
+    def test_nested_index_html_maps_to_readme(self) -> None:
+        assert _candidate_gitbook_paths(
+            self.SITE + "/docs/install/index.html", self.SITE,
+        ) == ["docs/install/README.md"]
+
+    def test_directory_form_maps_to_readme(self) -> None:
+        assert _candidate_gitbook_paths(
+            "docs/install/", self.SITE,
+        ) == ["docs/install/README.md"]
+
+    def test_drops_fragment_and_query(self) -> None:
+        assert _candidate_gitbook_paths(
+            self.SITE + "/docs/overview.html#features?x=1", self.SITE,
+        ) == ["docs/overview.md"]
+
+    def test_empty_returns_nothing(self) -> None:
+        assert _candidate_gitbook_paths("", self.SITE) == []
+        assert _candidate_gitbook_paths("   ", self.SITE) == []
+
+
+class TestGitBookRenderedUrl:
+    SITE = "https://fts3-docs.web.cern.ch/fts3-docs"
+
+    def test_root_readme(self) -> None:
+        assert (
+            _rendered_url_gitbook(self.SITE, "README.md")
+            == self.SITE + "/index.html"
+        )
+
+    def test_nested_readme(self) -> None:
+        assert (
+            _rendered_url_gitbook(self.SITE, "docs/install/README.md")
+            == self.SITE + "/docs/install/index.html"
+        )
+
+    def test_regular_page(self) -> None:
+        assert (
+            _rendered_url_gitbook(self.SITE, "docs/overview.md")
+            == self.SITE + "/docs/overview.html"
+        )
+
+
+class TestFetchToolOnGitBookSource:
+    OVERVIEW_MD = (
+        "# Overview\n\nFTS3 is a bulk data mover.\n\n## Features\n\n"
+        "Third party copies and S3 support.\n"
+    )
+
+    async def test_fetch_gitbook_uses_master_ref(
+        self,
+        mock_ctx: MagicMock,
+        mock_http: MagicMock,
+        make_response: Any,
+    ) -> None:
+        mock_http.get.return_value = make_response(text=self.OVERVIEW_MD)
+        tools = capture_tools(register)
+        await tools["fetch_doc"](
+            "docs/overview.html", source="fts", ctx=mock_ctx,
+        )
+        assert mock_http.get.call_args.kwargs.get("params") == {"ref": "master"}
+
+    async def test_fetch_gitbook_resolves_html_to_md(
+        self,
+        mock_ctx: MagicMock,
+        mock_http: MagicMock,
+        make_response: Any,
+    ) -> None:
+        mock_http.get.return_value = make_response(text=self.OVERVIEW_MD)
+        tools = capture_tools(register)
+        result = await tools["fetch_doc"](
+            "https://fts3-docs.web.cern.ch/fts3-docs/docs/overview.html",
+            source="fts",
+            ctx=mock_ctx,
+        )
+        data = json.loads(result)
+        assert data["source"] == "fts"
+        assert data["source_path"] == "docs/overview.md"
+        assert (
+            data["url"]
+            == "https://fts3-docs.web.cern.ch/fts3-docs/docs/overview.html"
+        )
+        assert "FTS3 is a bulk data mover" in data["content"]
+
+    async def test_fetch_gitbook_root_url_maps_to_readme(
+        self,
+        mock_ctx: MagicMock,
+        mock_http: MagicMock,
+        make_response: Any,
+    ) -> None:
+        mock_http.get.return_value = make_response(text="# Intro\n")
+        tools = capture_tools(register)
+        result = await tools["fetch_doc"](
+            "https://fts3-docs.web.cern.ch/fts3-docs/",
+            source="fts",
+            ctx=mock_ctx,
+        )
+        data = json.loads(result)
+        assert data["source_path"] == "README.md"
+        # GitLab API URL path-encodes the file path; ensure README.md was tried.
+        called_url = mock_http.get.call_args.args[0]
+        assert "README.md" in called_url
+        assert (
+            "/projects/fts%2Fdocumentation/repository/files/" in called_url
+        )
+
+    async def test_fetch_gitbook_outline_mode(
+        self,
+        mock_ctx: MagicMock,
+        mock_http: MagicMock,
+        make_response: Any,
+    ) -> None:
+        mock_http.get.return_value = make_response(text=self.OVERVIEW_MD)
+        tools = capture_tools(register)
+        result = await tools["fetch_doc"](
+            "docs/overview.md",
+            source="fts",
+            mode="outline",
+            ctx=mock_ctx,
+        )
+        data = json.loads(result)
+        assert data["mode"] == "outline"
+        headings = {h["heading"] for h in data["outline"]}
+        assert "Overview" in headings
+        assert "Features" in headings

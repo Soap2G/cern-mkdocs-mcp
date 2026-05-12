@@ -54,6 +54,15 @@
       "search_index_url": "https://swan.docs.cern.ch/search/search_index.json",
       "repo_url": "https://gitlab.cern.ch/swan/swan-docs",
       "docs_site_url": "https://swan.docs.cern.ch"
+    },
+    {
+      "id": "fts",
+      "name": "FTS3 (File Transfer Service)",
+      "source_type": "gitbook",
+      "repo_url": "https://gitlab.cern.ch/fts/documentation",
+      "docs_site_url": "https://fts3-docs.web.cern.ch/fts3-docs",
+      "summary_path": "SUMMARY.md",
+      "default_branch": "master"
     }
   ]
 }
