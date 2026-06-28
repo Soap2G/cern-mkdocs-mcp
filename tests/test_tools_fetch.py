@@ -81,6 +81,55 @@ class TestCandidatePaths:
             "docs/analysis/grid/index.md", "docs/analysis/grid.md",
         ]
 
+    def test_bare_host_docs_site_url_is_a_noop(self) -> None:
+        # Retro-compat: an unversioned source (docs_site_url == bare host) must
+        # behave exactly as before when the base is passed.
+        assert _candidate_source_paths(
+            "https://atlas-software.docs.cern.ch/analysis/grid/",
+            "https://atlas-software.docs.cern.ch",
+        ) == ["docs/analysis/grid/index.md", "docs/analysis/grid.md"]
+
+    def test_strips_versioned_latest_base(self) -> None:
+        # mike-versioned site: the published URL carries a /latest segment that
+        # the repo source tree does not. It must be stripped.
+        assert _candidate_source_paths(
+            "https://topcptoolkit.docs.cern.ch/latest/starting/installation/",
+            "https://topcptoolkit.docs.cern.ch/latest",
+        ) == [
+            "docs/starting/installation/index.md",
+            "docs/starting/installation.md",
+        ]
+
+    def test_strips_long_versioned_base_path(self) -> None:
+        # Longer base path (subdir + version): only the doc-relative remainder
+        # survives.
+        base = (
+            "https://atlas-project-topreconstruction.web.cern.ch"
+            "/fastframesdocumentation/latest"
+        )
+        assert _candidate_source_paths(
+            base + "/documentation/installation/", base,
+        ) == [
+            "docs/documentation/installation/index.md",
+            "docs/documentation/installation.md",
+        ]
+
+    def test_versioned_base_root_url(self) -> None:
+        assert _candidate_source_paths(
+            "https://topcptoolkit.docs.cern.ch/latest/",
+            "https://topcptoolkit.docs.cern.ch/latest",
+        ) == ["docs/index.md"]
+
+    def test_versioned_base_does_not_touch_relative_input(self) -> None:
+        # A relative input is assumed already doc-relative — no base stripping.
+        assert _candidate_source_paths(
+            "starting/installation/",
+            "https://topcptoolkit.docs.cern.ch/latest",
+        ) == [
+            "docs/starting/installation/index.md",
+            "docs/starting/installation.md",
+        ]
+
 
 class TestRenderedUrl:
     def test_index_md(self) -> None:
@@ -107,6 +156,18 @@ class TestRenderedUrl:
                 "https://atlas-software.docs.cern.ch", "docs/index.md",
             )
             == "https://atlas-software.docs.cern.ch/"
+        )
+
+    def test_versioned_base_re_adds_version_segment(self) -> None:
+        # The reverse mapping builds on docs_site_url (which already includes
+        # /latest), so a resolved repo path round-trips back to the public
+        # versioned URL.
+        assert (
+            _rendered_url(
+                "https://topcptoolkit.docs.cern.ch/latest",
+                "docs/starting/installation.md",
+            )
+            == "https://topcptoolkit.docs.cern.ch/latest/starting/installation/"
         )
 
 

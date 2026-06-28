@@ -35,7 +35,10 @@ _HEADING_RE = re.compile(r"^(#{1,6})\s+(.+?)\s*$", re.MULTILINE)
 _OUTLINE_MAX_LEVEL = 3
 
 
-def _candidate_source_paths(url_or_path: str) -> list[str]:
+def _candidate_source_paths(
+    url_or_path: str,
+    docs_site_url: str = "",
+) -> list[str]:
     """Map a docs URL or relative path to candidate ``docs/...`` paths.
 
     MkDocs convention only. For GitBook sources see
@@ -49,12 +52,29 @@ def _candidate_source_paths(url_or_path: str) -> list[str]:
     For directory-style inputs ``foo/bar/`` we return both ``foo/bar/index.md``
     (the MkDocs convention) and ``foo/bar.md`` (the alternative MkDocs
     convention). The tool tries them in order and falls through 404s.
+
+    ``docs_site_url`` lets the resolver strip a versioned-site base path from a
+    rendered URL — e.g. a ``mike`` version segment like ``/latest`` (or a
+    longer prefix such as ``/fastframesdocumentation/latest``) that the
+    published URL carries but the repo source tree does not. For unversioned
+    sites ``docs_site_url`` has no path component, so the strip is a no-op and
+    behaviour is unchanged. Only applied to full URLs (with a scheme); relative
+    inputs are assumed already doc-relative. Mirrors the GitBook branch's
+    ``site_base`` handling.
     """
     raw = url_or_path.strip()
     if not raw:
         return []
     parsed = urlparse(raw)
-    path = parsed.path if parsed.scheme else raw
+    if parsed.scheme:
+        path = parsed.path
+        site_base = urlparse(docs_site_url).path.rstrip("/")
+        if site_base and path.startswith(site_base + "/"):
+            path = path[len(site_base):]
+        elif site_base and path == site_base:
+            path = ""
+    else:
+        path = raw
     path = path.split("#", 1)[0].split("?", 1)[0]
     path = path.strip("/")
     if path.startswith("docs/"):
@@ -251,7 +271,9 @@ def register(mcp: FastMCP) -> None:
             )
             render_url = _rendered_url_gitbook
         else:
-            candidates = _candidate_source_paths(url_or_path)
+            candidates = _candidate_source_paths(
+                url_or_path, source_obj.docs_site_url,
+            )
             render_url = _rendered_url
 
         if not candidates:
