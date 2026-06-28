@@ -56,6 +56,20 @@
       "docs_site_url": "https://swan.docs.cern.ch"
     },
     {
+      "id": "fastframes",
+      "name": "FastFrames",
+      "search_index_url": "https://atlas-project-topreconstruction.web.cern.ch/fastframesdocumentation/latest/search/search_index.json",
+      "repo_url": "https://gitlab.cern.ch/atlas-amglab/fastframes",
+      "docs_site_url": "https://atlas-project-topreconstruction.web.cern.ch/fastframesdocumentation/latest"
+    },
+    {
+      "id": "topcptoolkit",
+      "name": "TopCPToolkit",
+      "search_index_url": "https://topcptoolkit.docs.cern.ch/latest/search/search_index.json",
+      "repo_url": "https://gitlab.cern.ch/atlas/amg/software/TopCPToolkit",
+      "docs_site_url": "https://topcptoolkit.docs.cern.ch/latest"
+    },
+    {
       "id": "fts",
       "name": "FTS3 (File Transfer Service)",
       "source_type": "gitbook",

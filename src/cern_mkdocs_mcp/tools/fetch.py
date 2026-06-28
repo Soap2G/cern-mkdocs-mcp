@@ -218,7 +218,8 @@ def register(mcp: FastMCP) -> None:
                 - A direct ``.md`` source path, e.g. ``analysis/grid.md``
             source: Documentation source ID. One of:
                 ``atlas-sft``, ``atlas-computing``, ``atlas-databases``,
-                ``batch``, ``cloud``, ``ml``, ``swan``, ``fts``.
+                ``batch``, ``cloud``, ``ml``, ``swan``, ``fts``,
+                ``fastframes``, ``topcptoolkit``.
                 Default: ``atlas-sft`` (ATLAS Software).
             mode: Output projection.
                 - ``"markdown"`` (default): full body.

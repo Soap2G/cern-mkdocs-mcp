@@ -50,7 +50,8 @@ def register(mcp: FastMCP) -> None:
                 via BM25 scoring, not strict AND.
             source: Documentation source ID. One of:
                 ``atlas-sft``, ``atlas-computing``, ``atlas-databases``,
-                ``batch``, ``cloud``, ``ml``, ``swan``, ``fts``.
+                ``batch``, ``cloud``, ``ml``, ``swan``, ``fts``,
+                ``fastframes``, ``topcptoolkit``.
                 Default: ``atlas-sft`` (ATLAS Software).
             limit: Max hits returned (1-25, default 10). Smaller is more
                 token-efficient.
